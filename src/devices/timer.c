@@ -84,16 +84,37 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+
+
+
+static bool block_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  struct thread *t1 = list_entry(a, struct thread, elem);
+  struct thread *t2 = list_entry(b, struct thread, elem);
+  return t1->sleep_ticks < t2->sleep_ticks;
+}
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
 timer_sleep (int64_t ticks) 
 {
-  int64_t start = timer_ticks ();
+  // race condition
+  // printf("timer_sleep\n");
 
+  int64_t start = timer_ticks ();
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  if (ticks <= 0) return;
+  enum intr_level old_level = intr_disable ();
+  thread_current()->sleep_ticks = ticks + start;
+  list_insert_ordered(&block_list, &thread_current()->elem, block_less, NULL);
+  thread_block();
+  intr_set_level (old_level);
+
+  // while (timer_elapsed (start) < ticks) 
+  //   thread_yield ();
+
+
+
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -172,6 +193,20 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  enum intr_level old_level = intr_disable ();
+  // printf("begin: %p, end: %p\n", list_begin(&block_list), list_end(&block_list));
+  for (struct list_elem *e = list_begin(&block_list); e != list_end(&block_list);) {
+    // printf("timer_interrupt\n");
+    struct thread *t = list_entry(e, struct thread, elem);
+    // printf("%lld, %lld\n", t->sleep_ticks, ticks);
+    if (t->sleep_ticks <= ticks) {
+      e = list_remove(e);
+      thread_unblock(t);
+    } else {
+      break;
+    } 
+  }
+  intr_set_level (old_level);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
