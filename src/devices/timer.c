@@ -86,7 +86,8 @@ timer_elapsed (int64_t then)
 
 
 
-
+/* comparision functions used to sort thread according to 
+   sleep_tick from small to large */
 static bool 
 block_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) 
 {
@@ -102,8 +103,7 @@ timer_sleep (int64_t ticks)
 {
   int64_t start = timer_ticks ();
   ASSERT (intr_get_level () == INTR_ON);
-  if (ticks <= 0) 
-    return;
+  /* disabling interrupt, set sleep_ticks and insert into block_list */
   intr_disable ();
   thread_current()->sleep_ticks = ticks + start;
   list_insert_ordered(&block_list, &thread_current()->elem, block_less, NULL);
@@ -187,6 +187,9 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  /* interate through block list and check if there is thread to wake up,
+      break if current tick is small for optimisation */
+  printf("%p, %p\n", list_begin(&block_list), list_end(&block_list));
   enum intr_level old_level = intr_disable ();
   for (struct list_elem *e = list_begin(&block_list); e != list_end(&block_list);) {
     struct thread *t = list_entry(e, struct thread, elem);

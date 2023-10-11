@@ -24,7 +24,7 @@ We can find logs in directory of `src/devices/build/tests/devices`: the results 
 
 > (a) What are the limitations on the size of these data structures?
 
-The size of `struct thread` should be stay under 1KB. `stack` needs to be under 4KB insize.
+The size of `struct thread` should be stay under 1KB. `stack` needs to be under 3KB insize.
 
 > (b) Explain how this relates to stack overflow and how Pintos identifies if a stack overflow has occurred.
 
@@ -38,7 +38,7 @@ Threads would be created by using struct thread. Each struct set will occupy a p
 
 Firstly, in the `main` function, it will call `thread_init()` to initialise the thread system. Then `thread_start()` will be called to start the schedule. It will also create a idle thread while being called. While using the thread, the system can call `thread_create()` to create a new thread. System can call `thread_current()` to get current thread status and `thread_block()` and `thread_unblock()` to change thread status.
 
-For switch thread, interrupt is send and `schedule()` is used. This function records current thread, determines which function will be running next, and calling `switch_threads()`. The rest of scheduler will frees the whole page of thread if it is in dying state(meaning that the thread is ended).
+For switch thread, interrupt is send and `schedule()` is used. This function records current thread, determines which function will be running next(`by calling 1next_thread_to_run()`), and calling `switch_threads()`. The rest of scheduler is implemented in `thread_schedule_taik()` and will frees the whole page of thread if it is in dying state(meaning that the thread is ended).
 
 Interrupt is highly important in threads. Without interrupt, Unexptected behaviour would be happened when program missed some input or when two thread want to dealing with the same input. It ensures that thread working correctly.
 
@@ -46,7 +46,7 @@ Interrupt is highly important in threads. Without interrupt, Unexptected behavio
 
 > In Pintos, what is the default length (in ticks and in seconds) of a scheduler time slice?
 
-there are `TIME_SLICE` ticks per time slice. The default is 4 ticks
+there are `TIME_SLICE` ticks per time slice. The default is 4 ticks(100 ticks per second).
 
 ## question 7
 
