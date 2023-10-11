@@ -189,7 +189,6 @@ timer_interrupt (struct intr_frame *args UNUSED)
   thread_tick ();
   /* interate through block list and check if there is thread to wake up,
       break if current tick is small for optimisation */
-  printf("%p, %p\n", list_begin(&block_list), list_end(&block_list));
   enum intr_level old_level = intr_disable ();
   for (struct list_elem *e = list_begin(&block_list); e != list_end(&block_list);) {
     struct thread *t = list_entry(e, struct thread, elem);
