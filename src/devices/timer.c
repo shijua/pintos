@@ -103,7 +103,7 @@ timer_elapsed (int64_t then)
 /* Used for compare between two list_elem      */
 bool
 sleep_thread_less_func (const struct list_elem *_elem1, const struct
-                        list_elem *_elem2, void *UNUSED)
+                        list_elem *_elem2, void *aux UNUSED)
 {
   struct sleep_list_thread *elem1, *elem2;
   elem1 = list_entry (_elem1, struct sleep_list_thread, list_e);
