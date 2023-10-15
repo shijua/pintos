@@ -2,8 +2,9 @@
 #ifndef PINTOS_7_FIXED_POINT_H
 #define PINTOS_7_FIXED_POINT_H
 
-#import "lib/stdint.h"
-#import "lib/inttypes.h"
+#include "lib/stdint.h"
+#include "lib/inttypes.h"
+#include "lib/assert.h"
 
 #define FLOATING_Q 14                     /* decimal part for real numbers */
 #define FLOATING_F (1 << FLOATING_Q)      /* integer part for real numbers */
@@ -40,6 +41,7 @@ static fp fp_multiply (fp real1, fp real2) {
 }
 
 static fp fp_divide (fp real1, fp real2) {
+  ASSERT (real2 != 0);
   return ((int64_t) real1) * FLOATING_F / real2;
 }
 
