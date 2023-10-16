@@ -36,6 +36,10 @@ static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
+/* prototype for sleep_thread_less_func       */
+bool sleep_thread_less_func (const struct list_elem *, const struct list_elem
+    *, void *);
+
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void
@@ -99,7 +103,7 @@ timer_elapsed (int64_t then)
 /* Used for compare between two list_elem      */
 bool
 sleep_thread_less_func (const struct list_elem *_elem1, const struct
-                        list_elem *_elem2, void *UNUSED)
+                        list_elem *_elem2, void *aux UNUSED)
 {
   struct sleep_list_thread *elem1, *elem2;
   elem1 = list_entry (_elem1, struct sleep_list_thread, list_e);
