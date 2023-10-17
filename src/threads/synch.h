@@ -3,11 +3,13 @@
 
 #include <list.h>
 #include <stdbool.h>
-
+#include <list.h>
 /* A counting semaphore. */
 struct semaphore 
   {
     unsigned value;             /* Current value. */
+    int max_donation;           /* Max donation value from waiters */
+    struct list_elem *max_elem; /* Pointer to max donation elem */
     struct list waiters;        /* List of waiting threads. */
   };
 

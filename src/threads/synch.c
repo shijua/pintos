@@ -47,6 +47,8 @@ sema_init (struct semaphore *sema, unsigned value)
   ASSERT (sema != NULL);
 
   sema->value = value;
+  sema->max_elem = NULL;
+  sema->max_donation = PRI_MIN;
   list_init (&sema->waiters);
 }
 
@@ -69,6 +71,12 @@ sema_down (struct semaphore *sema)
   while (sema->value == 0) 
     {
       list_push_back (&sema->waiters, &thread_current ()->elem);
+      // printf("down: %p %p %d\n", sema, sema->max_elem, sema->max_donation);
+      /* setting new donation priority */
+      if (thread_get_donation_priority() >= sema->max_donation) {
+        sema->max_donation = thread_get_donation_priority();
+        sema->max_elem = &thread_current ()->elem;
+      }
       thread_block ();
     }
   sema->value--;
@@ -101,6 +109,12 @@ sema_try_down (struct semaphore *sema)
   return success;
 }
 
+static bool thread_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  struct thread *ta = list_entry(a, struct thread, elem);
+  struct thread *tb = list_entry(b, struct thread, elem);
+  return ta->donation_priority < tb->donation_priority;
+}
+
 /* Up or "V" operation on a semaphore.  Increments SEMA's value
    and wakes up one thread of those waiting for SEMA, if any.
 
@@ -114,8 +128,23 @@ sema_up (struct semaphore *sema)
 
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+  {
+    /* remove the one with highest priority */
+    printf("before: %p %p %d\n", sema, sema->max_elem, sema->max_donation);
+    struct thread *remove_thread = list_entry(sema->max_elem, struct thread, elem);
+    list_remove(sema->max_elem);
+
+    if (!list_empty (&sema->waiters)) {
+      // reset max_elem and max_donation
+      sema->max_elem = list_max(&sema->waiters, thread_priority_less, NULL);
+      sema->max_donation = list_entry(sema->max_elem, struct thread, elem)->donation_priority;
+      printf("after: %p %p %d\n", sema, sema->max_elem, sema->max_donation);
+    }
+    /* update donated priority */
+    thread_set_donation_priority(sema->max_donation);
+    thread_unblock (remove_thread);
+  }
+    
   sema->value++;
   intr_set_level (old_level);
 }
