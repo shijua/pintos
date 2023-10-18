@@ -4,6 +4,7 @@
 #include <list.h>
 #include <stdbool.h>
 #include <list.h>
+#include <debug.h>
 /* A counting semaphore. */
 struct semaphore 
   {
@@ -12,6 +13,8 @@ struct semaphore
     struct list_elem *max_elem; /* Pointer to max donation elem */
     struct list waiters;        /* List of waiting threads. */
   };
+
+bool thread_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 void sema_init (struct semaphore *, unsigned value);
 void sema_down (struct semaphore *);

@@ -216,6 +216,12 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  /* If the newly created thread has a higher priority than
+   * the currently running thread, then switch to another thread */
+  if (priority > thread_get_donation_priority()) {
+    thread_yield();
+  }
+
   return tid;
 }
 
@@ -351,6 +357,15 @@ void
 thread_set_donation_priority (int new_priority) 
 {
   thread_current()->donation_priority = new_priority;
+
+  // /* if the priority become smaller than the max priority in the ready list 
+  //   switch to that thread*/
+  // if (!list_empty(&ready_list)) {
+  //   struct list_elem *e = list_max (&ready_list, thread_priority_less, NULL);
+  //   if (new_priority < list_entry(e, struct thread, elem)->donation_priority) {
+  //     thread_yield();
+  //   }
+  // }
 }
 
 /* Returns the current thread's basep riority. */
@@ -364,7 +379,18 @@ thread_get_donation_priority (void)
 void
 thread_set_priority (int new_priority) 
 {
+  int pre = thread_get_priority();
   thread_current ()->base_priority = new_priority;
+  thread_current ()->donation_priority = new_priority;
+  // if (new_priority > thread_get_donation_priority()) {
+  //   thread_set_donation_priority(new_priority);
+  // } 
+  if (new_priority < pre) {
+    struct list_elem *e = list_max (&ready_list, thread_priority_less, NULL);
+    thread_yield();
+  }
+
+  // TODO update the priority of the thread that is holding the lock
 }
 
 /* Returns the current thread's priority. */
@@ -525,8 +551,11 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  else {
+    struct list_elem *e = list_max (&ready_list, thread_priority_less, NULL);
+    list_remove (e);
+    return list_entry (e, struct thread, elem);
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page

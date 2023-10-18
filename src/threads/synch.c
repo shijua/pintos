@@ -109,7 +109,7 @@ sema_try_down (struct semaphore *sema)
   return success;
 }
 
-static bool thread_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+bool thread_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   struct thread *ta = list_entry(a, struct thread, elem);
   struct thread *tb = list_entry(b, struct thread, elem);
   return ta->donation_priority < tb->donation_priority;
@@ -130,7 +130,7 @@ sema_up (struct semaphore *sema)
   if (!list_empty (&sema->waiters)) 
   {
     /* remove the one with highest priority */
-    printf("before: %p %p %d\n", sema, sema->max_elem, sema->max_donation);
+    // printf("before: %p %p %d\n", sema, sema->max_elem, sema->max_donation);
     struct thread *remove_thread = list_entry(sema->max_elem, struct thread, elem);
     list_remove(sema->max_elem);
 
@@ -138,7 +138,7 @@ sema_up (struct semaphore *sema)
       // reset max_elem and max_donation
       sema->max_elem = list_max(&sema->waiters, thread_priority_less, NULL);
       sema->max_donation = list_entry(sema->max_elem, struct thread, elem)->donation_priority;
-      printf("after: %p %p %d\n", sema, sema->max_elem, sema->max_donation);
+      // printf("after: %p %p %d\n", sema, sema->max_elem, sema->max_donation);
     }
     /* update donated priority */
     thread_set_donation_priority(sema->max_donation);
