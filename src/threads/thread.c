@@ -258,7 +258,9 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, thread_priority_less, NULL);
+
+  
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -329,7 +331,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem, thread_priority_less, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -357,15 +359,6 @@ void
 thread_set_donation_priority (int new_priority) 
 {
   thread_current()->donation_priority = new_priority;
-
-  // /* if the priority become smaller than the max priority in the ready list 
-  //   switch to that thread*/
-  // if (!list_empty(&ready_list)) {
-  //   struct list_elem *e = list_max (&ready_list, thread_priority_less, NULL);
-  //   if (new_priority < list_entry(e, struct thread, elem)->donation_priority) {
-  //     thread_yield();
-  //   }
-  // }
 }
 
 /* Returns the current thread's basep riority. */
@@ -379,15 +372,22 @@ thread_get_donation_priority (void)
 void
 thread_set_priority (int new_priority) 
 {
-  int pre = thread_get_priority();
-  thread_current ()->base_priority = new_priority;
-  thread_current ()->donation_priority = new_priority;
-  // if (new_priority > thread_get_donation_priority()) {
-  //   thread_set_donation_priority(new_priority);
-  // } 
-  if (new_priority < pre) {
-    struct list_elem *e = list_max (&ready_list, thread_priority_less, NULL);
-    thread_yield();
+  /* if new priority is equal or greater to donation priority or there is no 
+   * donation priority then there is no donation priority so update is needed */
+  if (new_priority > thread_get_donation_priority() 
+  || thread_current()->base_priority == thread_get_donation_priority()) {
+     thread_set_donation_priority(new_priority);
+  } 
+  thread_current()->base_priority = new_priority;
+  
+  /* doing context switch if there are larger priority in the ready list */
+  if (!list_empty(&ready_list)) {
+    // list_sort(&ready_list, thread_priority_less, NULL);
+    // printf("change priority%d %d\n", new_priority, list_entry(list_back(&ready_list), struct thread, elem)->donation_priority);
+    // printf("new name %s\n", list_entry(list_back(&ready_list), struct thread, elem)->name);
+    if (new_priority < list_entry(list_back(&ready_list), struct thread, elem)->donation_priority) {
+      thread_yield();
+    }
   }
 
   // TODO update the priority of the thread that is holding the lock
@@ -552,9 +552,7 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else {
-    struct list_elem *e = list_max (&ready_list, thread_priority_less, NULL);
-    list_remove (e);
-    return list_entry (e, struct thread, elem);
+    return list_entry (list_pop_back(&ready_list), struct thread, elem);
   }
 }
 
