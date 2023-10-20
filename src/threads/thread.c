@@ -337,6 +337,17 @@ thread_yield (void)
   intr_set_level (old_level);
 }
 
+void try_thread_yield (int priority) {
+  if (!list_empty(&ready_list)) {
+    if (priority < list_entry(list_back(&ready_list), struct thread, elem)->donation_priority) {
+      if (intr_context())
+        intr_yield_on_return();
+      else
+        thread_yield();
+    }
+  }
+}
+
 /* Invoke function 'func' on all threads, passing along 'aux'.
    This function must be called with interrupts off. */
 void
@@ -381,14 +392,8 @@ thread_donate_priority (struct thread *t, int priority)
     //   printf("%s %d\n", t->name, t->donation_priority);
     // }
     /* doing context switch after donation */
-    if (!list_empty(&ready_list)) {
-      // printf("%d\n", priority <= list_entry(list_back(&ready_list), struct thread, elem)->donation_priority);
-      if (priority <= list_entry(list_back(&ready_list), struct thread, elem)->donation_priority) {
-        thread_yield();
-      }
-    }
   }
-  
+  try_thread_yield(priority);
 };
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -409,14 +414,7 @@ thread_set_priority (int priority)
   cur->base_priority = priority;
   
   /* doing context switch if there are larger priority in the ready list */
-  if (!list_empty(&ready_list)) {
-    // printf("change priority%d %d\n", priority, list_entry(list_back(&ready_list), struct thread, elem)->donation_priority);
-    // printf("new name %s\n", list_entry(list_back(&ready_list), struct thread, elem)->name);
-    if (priority < list_entry(list_back(&ready_list), struct thread, elem)->donation_priority) {
-      thread_yield();
-    }
-  }
-  
+  try_thread_yield(priority);
 }
 
 /* Returns the current thread's priority. */

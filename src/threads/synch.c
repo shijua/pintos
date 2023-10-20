@@ -106,7 +106,7 @@ sema_try_down (struct semaphore *sema)
 bool thread_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   struct thread *ta = list_entry(a, struct thread, elem);
   struct thread *tb = list_entry(b, struct thread, elem);
-  return ta->donation_priority <= tb->donation_priority;
+  return ta->donation_priority < tb->donation_priority;
 }
 
 /* Up or "V" operation on a semaphore.  Increments SEMA's value
@@ -135,6 +135,7 @@ sema_up (struct semaphore *sema)
     
   sema->value++;
   intr_set_level (old_level);
+  try_thread_yield(thread_current()->donation_priority);
 }
 
 static void sema_test_helper (void *sema_);
@@ -219,7 +220,7 @@ lock_acquire (struct lock *lock)
   }
   sema_down (&lock->semaphore);
   t->waiting_lock = NULL;
-  lock->holder = thread_current ();
+  lock->holder = t;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -252,7 +253,7 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-
+  // printf("sema waitors sizess: %d\n", list_size(&lock->semaphore.waiters));
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
