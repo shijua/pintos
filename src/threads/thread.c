@@ -218,7 +218,7 @@ thread_create (const char *name, int priority,
 
   /* If the newly created thread has a higher priority than
    * the currently running thread, then switch to another thread */
-  if (priority > thread_get_donation_priority()) {
+  if (priority > thread_get_priority()) {
     thread_yield();
   }
 
@@ -354,50 +354,76 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
-/* Sets the current thread's base priority to NEW_PRIORITY. */
-void
-thread_set_donation_priority (int new_priority) 
-{
-  thread_current()->donation_priority = new_priority;
-}
 
-/* Returns the current thread's basep riority. */
-int
-thread_get_donation_priority (void) 
+void
+thread_donate_priority (struct thread *t, int priority)
 {
-  return thread_current()->donation_priority;
-}
+  // printf("new: %d\n", priority);
+  // printf("donate: %d %d\n", t->donation_priority, thread_current()->donation_priority);
+  // printf("name: %s %s\n", t->name, thread_current()->name);
+  if (t->donation_priority < priority) {
+    t->donation_priority = priority;
+    /* reorder the ready list */
+    if (t->status == THREAD_READY) {
+      list_remove(&t->elem);
+      list_insert_ordered(&ready_list, &t->elem, thread_priority_less, NULL);
+    }
+    /* for nested donation */
+    if (t->waiting_lock != NULL) {
+      thread_donate_priority(t->waiting_lock->holder, priority);
+    }
+    // print all element in ready list
+    // struct list_elem *e;
+    // for (e = list_begin (&ready_list); e != list_end (&ready_list);
+    //    e = list_next (e))
+    // {
+    //   struct thread *t = list_entry (e, struct thread, elem);
+    //   printf("%s %d\n", t->name, t->donation_priority);
+    // }
+    /* doing context switch after donation */
+    if (!list_empty(&ready_list)) {
+      // printf("%d\n", priority <= list_entry(list_back(&ready_list), struct thread, elem)->donation_priority);
+      if (priority <= list_entry(list_back(&ready_list), struct thread, elem)->donation_priority) {
+        thread_yield();
+      }
+    }
+  }
+  
+};
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
-thread_set_priority (int new_priority) 
+thread_set_priority (int priority) 
 {
   /* if new priority is equal or greater to donation priority or there is no 
    * donation priority then there is no donation priority so update is needed */
-  if (new_priority > thread_get_donation_priority() 
-  || thread_current()->base_priority == thread_get_donation_priority()) {
-     thread_set_donation_priority(new_priority);
+  struct thread *cur = thread_current();
+  if (priority > thread_get_priority() 
+  || cur->base_priority == thread_get_priority()) {
+     cur->donation_priority = priority;
+     /* for nested donation */
+     if (cur->waiting_lock != NULL) {
+      thread_donate_priority(cur->waiting_lock->holder, priority);
+    }
   } 
-  thread_current()->base_priority = new_priority;
+  cur->base_priority = priority;
   
   /* doing context switch if there are larger priority in the ready list */
   if (!list_empty(&ready_list)) {
-    // list_sort(&ready_list, thread_priority_less, NULL);
-    // printf("change priority%d %d\n", new_priority, list_entry(list_back(&ready_list), struct thread, elem)->donation_priority);
+    // printf("change priority%d %d\n", priority, list_entry(list_back(&ready_list), struct thread, elem)->donation_priority);
     // printf("new name %s\n", list_entry(list_back(&ready_list), struct thread, elem)->name);
-    if (new_priority < list_entry(list_back(&ready_list), struct thread, elem)->donation_priority) {
+    if (priority < list_entry(list_back(&ready_list), struct thread, elem)->donation_priority) {
       thread_yield();
     }
   }
-
-  // TODO update the priority of the thread that is holding the lock
+  
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->base_priority;
+  return thread_current ()->donation_priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -520,8 +546,6 @@ init_thread (struct thread *t, const char *name, int priority)
 
   t->base_priority = priority;
   t->donation_priority = priority;
-  // lock_init(&t->waiting_lock);
-  // printf("initial: %d\n", priority);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

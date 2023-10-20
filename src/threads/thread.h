@@ -90,7 +90,7 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int base_priority;                  /* Base Priority. */
     int donation_priority;              /* Donation Priority. */
-    struct lock waiting_lock;           /* Lock that the thread is waiting on. */
+    struct lock *waiting_lock;           /* Lock that the thread is waiting on. */
     
     struct list_elem allelem;           /* List element for all threads list. */
 
@@ -135,8 +135,7 @@ void thread_yield (void);
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
-int thread_get_donation_priority (void);
-void thread_set_donation_priority (int);
+void thread_donate_priority (struct thread *t, int priority);
 int thread_get_priority (void);
 void thread_set_priority (int);
 

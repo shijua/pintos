@@ -70,13 +70,7 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      list_push_back (&sema->waiters, &thread_current ()->elem);
-      // printf("down: %p %p %d\n", sema, sema->max_elem, sema->max_donation);
-      /* setting new donation priority */
-      if (thread_get_donation_priority() >= sema->max_donation) {
-        sema->max_donation = thread_get_donation_priority();
-        sema->max_elem = &thread_current ()->elem;
-      }
+      list_insert_ordered (&sema->waiters, &thread_current ()->elem, thread_priority_less, NULL);
       thread_block ();
     }
   sema->value--;
@@ -112,7 +106,7 @@ sema_try_down (struct semaphore *sema)
 bool thread_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   struct thread *ta = list_entry(a, struct thread, elem);
   struct thread *tb = list_entry(b, struct thread, elem);
-  return ta->donation_priority < tb->donation_priority;
+  return ta->donation_priority <= tb->donation_priority;
 }
 
 /* Up or "V" operation on a semaphore.  Increments SEMA's value
@@ -130,18 +124,12 @@ sema_up (struct semaphore *sema)
   if (!list_empty (&sema->waiters)) 
   {
     /* remove the one with highest priority */
-    // printf("before: %p %p %d\n", sema, sema->max_elem, sema->max_donation);
-    struct thread *remove_thread = list_entry(sema->max_elem, struct thread, elem);
-    list_remove(sema->max_elem);
+    struct thread *remove_thread = list_entry(list_back(&sema->waiters), struct thread, elem);
+    struct thread *cur = thread_current();
+    list_remove(list_back(&sema->waiters));
 
-    if (!list_empty (&sema->waiters)) {
-      // reset max_elem and max_donation
-      sema->max_elem = list_max(&sema->waiters, thread_priority_less, NULL);
-      sema->max_donation = list_entry(sema->max_elem, struct thread, elem)->donation_priority;
-      // printf("after: %p %p %d\n", sema, sema->max_elem, sema->max_donation);
-    }
-    /* update donated priority */
-    thread_set_donation_priority(sema->max_donation);
+    /* update donated priority to base_priority */
+    cur->donation_priority = (cur->base_priority);
     thread_unblock (remove_thread);
   }
     
@@ -224,8 +212,13 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
-
+  struct thread* t = thread_current();
+  t->waiting_lock = lock;
+  if (lock->holder != NULL) {
+    thread_donate_priority(lock->holder, t->donation_priority);
+  }
   sema_down (&lock->semaphore);
+  t->waiting_lock = NULL;
   lock->holder = thread_current ();
 }
 
