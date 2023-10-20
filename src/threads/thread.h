@@ -4,6 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/fixed_point.h"
+#include "devices/timer.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -93,6 +95,8 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+    int nice;                           /* Nice value. */
+    fp recent_cpu;                      /* Recent CPU. */
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -138,5 +142,7 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+void update_recent_cpu(struct thread *t, void *aux UNUSED);
 
 #endif /* threads/thread.h */

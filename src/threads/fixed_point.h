@@ -1,0 +1,85 @@
+/* fixed-point.h -- header file for floating point implementation */
+#ifndef PINTOS_7_FIXED_POINT_H
+#define PINTOS_7_FIXED_POINT_H
+
+#include "lib/stdint.h"
+#include "lib/inttypes.h"
+
+#define FLOATING_Q 14                     /* decimal part for real numbers */
+#define FLOATING_F (1 << FLOATING_Q)      /* integer part for real numbers */
+
+/* using int to represent floating points */
+typedef int32_t fp;
+
+/* Constructs a fixed-point representation from a fraction */
+static inline fp fp_construct(int numerator, int denominator) {
+    return (int64_t) numerator * FLOATING_F / denominator;
+}
+
+/* Converts a fixed-point value to an integer, rounding down */
+static inline int fp_rounding_down(fp real_number) {
+    return real_number / FLOATING_F;
+}
+
+/* Converts a fixed-point value to an integer, rounding to nearest */
+static inline int fp_rounding_near(fp real_number) {
+    if (real_number >= 0) {
+        return (real_number + FLOATING_F / 2) / FLOATING_F;
+    } else {
+        return (real_number - FLOATING_F / 2) / FLOATING_F;
+    }
+}
+
+/* Addition operations */
+static inline fp fp_add_int(fp real_number, int int_number) {
+    return real_number + int_number * FLOATING_F;
+}
+
+static inline fp int_add_fp(int int_number, fp real_number) {
+    return fp_add_int(real_number, int_number);
+}
+
+static inline fp fp_add(fp real1, fp real2) {
+    return real1 + real2;
+}
+
+/* Subtraction operations */
+static inline fp fp_subtract_int(fp real_number, int int_number) {
+    return real_number - int_number * FLOATING_F;
+}
+
+static inline fp int_subtract_fp(int int_number, fp real_number) {
+    return int_number * FLOATING_F - real_number;
+}
+
+static inline fp fp_subtract(fp real1, fp real2) {
+    return real1 - real2;
+}
+
+/* Multiplication operations */
+static inline fp fp_multiply(fp real1, fp real2) {
+    return ((int64_t) real1 * real2) / FLOATING_F;
+}
+
+static inline fp fp_multiply_int(fp real_number, int int_number) {
+    return real_number * int_number;
+}
+
+static inline fp int_multiply_fp(int int_number, fp real_number) {
+    return int_number * real_number;
+}
+
+/* Division operations */
+static inline fp fp_divide(fp real1, fp real2) {
+    return ((int64_t) real1 * FLOATING_F) / real2;
+}
+
+static inline fp fp_divide_int(fp real_number, int int_number) {
+    return real_number / int_number;
+}
+
+static inline fp int_divide_fp(int int_number, fp real_number) {
+    return ((int64_t) int_number * FLOATING_F) / real_number;
+}
+
+#endif //PINTOS_7_FIXED_POINT_H
