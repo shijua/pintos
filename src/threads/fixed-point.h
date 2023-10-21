@@ -8,40 +8,62 @@
 
 #define FLOATING_Q 14                     /* decimal part for real numbers */
 #define FLOATING_F (1 << FLOATING_Q)      /* integer part for real numbers */
+#define LAST_BIT 31                       /* last bit for real numbers     */
+#define SIGN_BIT (1 << LAST_BIT)          /* signed bit for real numbers   */
 
-/* using int represent floating points */
+/* Using int represent floating points */
 typedef int32_t fp;
 
-/* basic function for floating points */
-static fp fp_construct (int numerator, int denominator) {
+/* Negativity for real numbers         */
+#define IS_NEGATIVE(rn) ((rn & SIGN_BIT) != 0)
+#define NEGATIVE(rn) (rn ^ SIGN_BIT)
+
+/* Absolute value for real numbers     */
+#define ABS(rn) (IS_NEGATIVE(rn) ? NEGATIVE(rn) : rn)
+
+/* Basic function for floating points  */
+static fp
+fp_fraction_construct (int numerator, int denominator) {
   return (numerator * FLOATING_F) / denominator;
 }
 
-static int fp_rounding_down (fp real_number) {
-  return real_number / FLOATING_F;
+static fp
+fp_int_construct (int int_number) {
+  return int_number * FLOATING_F;
 }
 
-static int fp_rounding_near (fp real_number) {
+/* Mind that the return value for down and near is in int not fp. */
+static int
+fp_rounding_down (fp real_number) {
+  int value =  real_number / FLOATING_F;
+  return value - (IS_NEGATIVE(real_number) ? 1 : 0);
+}
+
+static int
+fp_rounding_near (fp real_number) {
   return (real_number >= 0) ? (real_number + FLOATING_F / 2) / FLOATING_F :
          (real_number - FLOATING_F / 2) / FLOATING_F;
 }
 
 /* operator for floating point numbers addition and subtraction */
-static fp fp_add (fp real_number, int int_number) {
+static fp
+fp_add (fp real_number, int int_number) {
   return real_number + int_number * FLOATING_F;
 }
 
-static fp fp_subtract (fp real_number, int int_number) {
+static fp
+fp_subtract (fp real_number, int int_number) {
   return real_number - int_number * FLOATING_F;
 }
 
 /* operator for floating point multiplication and division      */
-static fp fp_multiply (fp real1, fp real2) {
+static fp
+fp_multiply (fp real1, fp real2) {
   return ((int64_t) real1) * real2 / FLOATING_F;
 }
 
-static fp fp_divide (fp real1, fp real2) {
-  ASSERT (real2 != 0);
+static fp
+fp_divide (fp real1, fp real2) {
   return ((int64_t) real1) * FLOATING_F / real2;
 }
 
