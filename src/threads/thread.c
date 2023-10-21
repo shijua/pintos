@@ -106,14 +106,17 @@ thread_init (void)
   list_init (&ready_list);
   list_init (&all_list);
 
-  // TODO: adding case for thread_mlfqs.
-
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT,
                NIC_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+
+  /* Set load_avg into 0 if mlfqs. */
+  if (thread_mlfqs) {
+    load_avg = 0;
+  }
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -206,7 +209,8 @@ thread_create (const char *name, int priority,
   // TODO: adding case for thread_mlfqs.
 
   /* Initialize thread. */
-  init_thread (t, name, priority, NIC_DEFAULT);
+  int create_priority = thread_mlfqs ? PRI_MAX : priority;
+  init_thread (t, name, create_priority, NIC_DEFAULT);
   tid = t->tid = allocate_tid ();
 
   /* Prepare thread for first run by initializing its stack.
@@ -348,11 +352,9 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread)
-
-    // TODO: adding case for thread_mlfqs.
-
-    list_insert_ordered (&ready_list, &cur->elem, thread_priority_less, NULL);
+  if (cur != idle_thread) {
+    list_insert_ordered(&ready_list, &cur->elem, thread_priority_less, NULL);
+  }
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -495,8 +497,19 @@ recalculate_cpu (struct thread * cur) {
 void
 thread_set_nice (int nice UNUSED) 
 {
-  thread_current ()->niceness = nice;
-  // TODO: recalculate priority.
+  struct thread *cur = thread_current();
+  cur->niceness = nice;
+
+  recalculate_priority(cur);
+
+  /* Check the priority in the list determine whether to yield. */
+  if (!list_empty (&ready_list)) {
+    struct thread *first = list_entry (list_front (&ready_list), struct
+        thread, elem);
+    if (cur->base_priority < first->base_priority) {
+      thread_yield ();
+    }
+  }
 }
 
 /* Returns the current thread's nice value. */
