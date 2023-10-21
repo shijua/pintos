@@ -9,6 +9,7 @@
 #define FLOATING_F (1 << FLOATING_Q)      /* integer part for real numbers */
 #define LAST_BIT 31                       /* last bit for real numbers     */
 #define SIGN_BIT (1 << LAST_BIT)          /* signed bit for real numbers   */
+#define TIMER_FREQ 100                    /* timer interrupts occurrence   */
 
 /* Using int represent floating points */
 typedef int32_t fp;
@@ -19,6 +20,9 @@ typedef int32_t fp;
 
 /* Absolute value for real numbers     */
 #define ABS(rn) (IS_NEGATIVE(rn) ? NEGATIVE(rn) : rn)
+
+/* Calculate */
+#define CONVERT_FREQ(rn) (rn * TIMER_FREQ)
 
 /* Basic function for floating points  */
 static inline fp

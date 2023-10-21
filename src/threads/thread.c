@@ -62,6 +62,8 @@ bool thread_mlfqs;
 
 /* Load average for calculating recent_cpu. */
 static int load_avg;
+#define RATIO_LOAD (fp_fraction_construct (59, 60))
+#define RATIO_READY (fp_fraction_construct (1, 60))
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -75,8 +77,12 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+
+static void bounded_priority (struct thread *, int);
+static void recalculate_priority (struct thread *);
 static void recalculate_cpu (struct thread *);
 static void increase_cpu (struct thread *);
+static void recalculate_load_avg (void);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -99,6 +105,8 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+
+  // TODO: adding case for thread_mlfqs.
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -194,6 +202,8 @@ thread_create (const char *name, int priority,
   t = palloc_get_page (PAL_ZERO);
   if (t == NULL)
     return TID_ERROR;
+
+  // TODO: adding case for thread_mlfqs.
 
   /* Initialize thread. */
   init_thread (t, name, priority, NIC_DEFAULT);
@@ -338,14 +348,18 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
+  if (cur != idle_thread)
+
+    // TODO: adding case for thread_mlfqs.
+
     list_insert_ordered (&ready_list, &cur->elem, thread_priority_less, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
 }
 
-void try_thread_yield (int priority) {
+void
+try_thread_yield (int priority) {
   if (!list_empty(&ready_list)) {
     if (priority < list_entry(list_back(&ready_list), struct thread, elem)->donation_priority) {
       if (intr_context())
@@ -432,6 +446,27 @@ thread_get_priority (void)
   return thread_current ()->donation_priority;
 }
 
+/* Bounding priority with the range. */
+static void
+bounded_priority (struct thread *cur, int re_priority) {
+  if (re_priority > PRI_MAX) {
+    cur->base_priority = PRI_MAX;
+  } else if (re_priority < PRI_MIN) {
+    cur->base_priority = PRI_MIN;
+  } else {
+    cur->base_priority = re_priority;
+  }
+}
+
+/* Recalculate priority with PRI_MAX and recent_cpu with niceness, */
+static void
+recalculate_priority (struct thread *cur) {
+  fp recent_cpu = cur->recent_cpu;
+  fp niceness = cur->niceness;
+  int re_priority = fp_rounding_down ((recent_cpu / 4) - (niceness * 2));
+  bounded_priority(cur, re_priority);
+}
+
 /* Increase cpu by 1 if it is not idle. */
 static void
 increase_cpu (struct thread * cur) {
@@ -444,7 +479,6 @@ increase_cpu (struct thread * cur) {
 /* Recalculate CPU with niceness and recent_cpu. */
 static void
 recalculate_cpu (struct thread * cur) {
-
   /* Basic int - fp convert. */
   fp inc = fp_int_construct (1);
   fp niceness = fp_int_construct (cur->niceness);
@@ -472,20 +506,27 @@ thread_get_nice (void)
   return thread_current ()->niceness;
 }
 
+/* Recalculate load_avg. */
+static void
+recalculate_load_avg (void) {
+  fp base_load_avg = fp_multiply (RATIO_LOAD, load_avg);
+  fp base_ready = fp_multiply (RATIO_READY, threads_ready ());
+  load_avg = base_load_avg + base_ready;
+}
+
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return fp_rounding_down (CONVERT_FREQ (load_avg));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  int recent_cpu = thread_current ()->recent_cpu;
+  return fp_rounding_down (CONVERT_FREQ (recent_cpu));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
