@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixed-point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -59,17 +60,23 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-mlfqs". */
 bool thread_mlfqs;
 
+/* Load average for calculating recent_cpu. */
+static int load_avg;
+
 static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
 static struct thread *next_thread_to_run (void);
-static void init_thread (struct thread *, const char *name, int priority);
+static void init_thread (struct thread *, const char *name, int priority, int
+    niceness);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+static void recalculate_cpu (struct thread *);
+static void increase_cpu (struct thread *);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -95,7 +102,8 @@ thread_init (void)
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
-  init_thread (initial_thread, "main", PRI_DEFAULT);
+  init_thread (initial_thread, "main", PRI_DEFAULT,
+               NIC_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
 }
@@ -188,7 +196,7 @@ thread_create (const char *name, int priority,
     return TID_ERROR;
 
   /* Initialize thread. */
-  init_thread (t, name, priority);
+  init_thread (t, name, priority, NIC_DEFAULT);
   tid = t->tid = allocate_tid ();
 
   /* Prepare thread for first run by initializing its stack.
@@ -424,19 +432,44 @@ thread_get_priority (void)
   return thread_current ()->donation_priority;
 }
 
+/* Increase cpu by 1 if it is not idle. */
+static void
+increase_cpu (struct thread * cur) {
+  fp inc = fp_int_construct (1);
+  if (cur != idle_thread) {
+    cur->recent_cpu += inc;
+  }
+}
+
+/* Recalculate CPU with niceness and recent_cpu. */
+static void
+recalculate_cpu (struct thread * cur) {
+
+  /* Basic int - fp convert. */
+  fp inc = fp_int_construct (1);
+  fp niceness = fp_int_construct (cur->niceness);
+  fp recent_cpu = cur->recent_cpu;
+
+  /* recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * recent_cpu + nice */
+  fp ratio = fp_divide (2 * load_avg, (2 * load_avg) + inc);
+  fp new_cpu = fp_multiply (ratio, recent_cpu) + niceness;
+
+  cur->recent_cpu = new_cpu;
+}
+
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice UNUSED) 
 {
-  /* Not yet implemented. */
+  thread_current ()->niceness = nice;
+  // TODO: recalculate priority.
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current ()->niceness;
 }
 
 /* Returns 100 times the system load average. */
@@ -528,7 +561,7 @@ is_thread (struct thread *t)
 /* Does basic initialization of T as a blocked thread named
    NAME. */
 static void
-init_thread (struct thread *t, const char *name, int priority)
+init_thread (struct thread *t, const char *name, int priority, int niceness)
 {
   enum intr_level old_level;
 
@@ -544,6 +577,9 @@ init_thread (struct thread *t, const char *name, int priority)
 
   t->base_priority = priority;
   t->donation_priority = priority;
+
+  t->niceness = niceness;
+  t->recent_cpu = 0;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

@@ -4,7 +4,6 @@
 
 #include "lib/stdint.h"
 #include "lib/inttypes.h"
-#include "lib/assert.h"
 
 #define FLOATING_Q 14                     /* decimal part for real numbers */
 #define FLOATING_F (1 << FLOATING_Q)      /* integer part for real numbers */
@@ -22,47 +21,47 @@ typedef int32_t fp;
 #define ABS(rn) (IS_NEGATIVE(rn) ? NEGATIVE(rn) : rn)
 
 /* Basic function for floating points  */
-static fp
+static inline fp
 fp_fraction_construct (int numerator, int denominator) {
   return (numerator * FLOATING_F) / denominator;
 }
 
-static fp
+static inline fp
 fp_int_construct (int int_number) {
   return int_number * FLOATING_F;
 }
 
 /* Mind that the return value for down and near is in int not fp. */
-static int
+static inline int
 fp_rounding_down (fp real_number) {
   int value =  real_number / FLOATING_F;
   return value - (IS_NEGATIVE(real_number) ? 1 : 0);
 }
 
-static int
+static inline int
 fp_rounding_near (fp real_number) {
   return (real_number >= 0) ? (real_number + FLOATING_F / 2) / FLOATING_F :
          (real_number - FLOATING_F / 2) / FLOATING_F;
 }
 
 /* operator for floating point numbers addition and subtraction */
-static fp
+static inline fp
 fp_add (fp real_number, int int_number) {
   return real_number + int_number * FLOATING_F;
 }
 
-static fp
+static inline fp
 fp_subtract (fp real_number, int int_number) {
   return real_number - int_number * FLOATING_F;
 }
 
 /* operator for floating point multiplication and division      */
-static fp
+static inline fp
 fp_multiply (fp real1, fp real2) {
   return ((int64_t) real1) * real2 / FLOATING_F;
 }
 
-static fp
+static inline fp
 fp_divide (fp real1, fp real2) {
   return ((int64_t) real1) * FLOATING_F / real2;
 }

@@ -21,9 +21,14 @@ typedef int tid_t;
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
-#define PRI_MIN 0                       /* Lowest priority. */
+#define PRI_MIN 0                       /* Lowest priority.  */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/* Thread niceness.   */
+#define NIC_MIN -20                     /* Lowest niceness.  */
+#define NIC_DEFAULT 0                   /* Default niceness. */
+#define NIC_MAX 20                      /* Highest niceness. */
 
 /* A kernel thread or user process.
 
@@ -104,6 +109,10 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+
+    /* BSD used.          */
+    int niceness;                       /* Niceness of thread.   */
+    int recent_cpu;                     /* Recent cpu of thread. */
   };
 
 /* If false (default), use round-robin scheduler.
