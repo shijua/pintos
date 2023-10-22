@@ -5,6 +5,8 @@
 #include <list.h>
 #include <stdint.h>
 #include "synch.h"
+#include "threads/fixed-point.h"
+#include "devices/timer.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -153,8 +155,5 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
-bool sort_by_priority (const struct list_elem *, const struct list_elem *,
-    void *);
 
 #endif /* threads/thread.h */

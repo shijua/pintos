@@ -27,7 +27,7 @@ typedef int32_t fp;
 /* Basic function for floating points  */
 static inline fp
 fp_fraction_construct (int numerator, int denominator) {
-  return (numerator * FLOATING_F) / denominator;
+  return ((int64_t) numerator * FLOATING_F) / denominator;
 }
 
 static inline fp
@@ -38,8 +38,8 @@ fp_int_construct (int int_number) {
 /* Mind that the return value for down and near is in int not fp. */
 static inline int
 fp_rounding_down (fp real_number) {
-  int value =  real_number / FLOATING_F;
-  return value - (IS_NEGATIVE(real_number) ? 1 : 0);
+  return real_number / FLOATING_F;
+  // return value - (IS_NEGATIVE(real_number) ? 1 : 0);
 }
 
 static inline int

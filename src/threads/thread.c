@@ -11,7 +11,6 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "threads/fixed-point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -113,7 +112,7 @@ thread_init (void)
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
 
-  load_avg = 0;
+  load_avg = fp_int_construct (0);
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -157,39 +156,47 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  /* Enforce preemption. */
-  if (++thread_ticks >= TIME_SLICE)
-    intr_yield_on_return ();
-
   if (thread_mlfqs) {
-    if (t != idle_thread) {
-      /* increase current cpu by 1. */
-      increase_cpu(t);
-    }
+    increase_cpu(t);
     if (timer_ticks () % TIMER_FREQ == 0) {
+      size_t ready_size = threads_ready ();
       if (t != idle_thread) {
         /* increase ready list size. */
-        size_t ready_size = threads_ready ();
         ready_size++;
       }
-      recalculate_load_avg ();
+      printf("====================\n");
+      printf("before load_avg: %d\n", load_avg);
+      printf("before cpu:      %d\n", t->recent_cpu);
+      printf("before ready:    %d\n", threads_ready());
+      // recalculate_load_avg ();
+      load_avg = (fp_multiply (fp_fraction_construct (59, 60), load_avg) +
+          fp_multiply (fp_fraction_construct (1, 60), fp_fraction_construct
+          (ready_size, 1)));
+      printf("after  load_avg: %d\n", load_avg);
+      printf("after  cpu:      %d\n", t->recent_cpu);
+      printf("after  ready:    %d\n", threads_ready());
+      printf("====================\n");
       thread_foreach (recalculate_cpu, NULL);
-      list_sort (&ready_list, sort_by_priority, NULL);
+      list_sort (&ready_list, thread_priority_less, NULL);
     }
     if (timer_ticks () % 4 == 0) {
       thread_foreach (recalculate_priority, NULL);
-      list_sort (&ready_list, sort_by_priority, NULL);
+      list_sort (&ready_list, thread_priority_less, NULL);
     }
 
     /* Checking yielding. */
     if (!list_empty (&ready_list)) {
       int cur_priority = thread_current ()->base_priority;
-      struct thread* first = list_entry (list_front (&ready_list), struct
-          thread, elem);
-      int first_priority = first->base_priority;
+      int first_priority = list_entry (list_front (&ready_list), struct
+          thread, elem)->base_priority;
       if (cur_priority < first_priority) {
-        intr_yield_on_return();
+        intr_yield_on_return ();
       }
+    }
+  } else {
+    /* Enforce preemption. */
+    if (++thread_ticks >= TIME_SLICE) {
+      intr_yield_on_return ();
     }
   }
 }
@@ -236,8 +243,8 @@ thread_create (const char *name, int priority,
     return TID_ERROR;
 
   /* Initialize thread. */
-  int create_priority = thread_mlfqs ? PRI_MAX : priority;
-  init_thread (t, name, create_priority, NIC_DEFAULT);
+  // int create_priority = thread_mlfqs ? PRI_MAX : priority;
+  init_thread (t, name, priority, NIC_DEFAULT);
   tid = t->tid = allocate_tid ();
 
   /* Prepare thread for first run by initializing its stack.
@@ -267,9 +274,9 @@ thread_create (const char *name, int priority,
 
   /* If the newly created thread has a higher priority than
    * the currently running thread, then switch to another thread */
-  if (priority > thread_get_priority()) {
-    thread_yield();
-  }
+//  if (priority > thread_get_priority()) {
+//    thread_yield();
+//  }
 
   return tid;
 }
@@ -451,21 +458,22 @@ thread_donate_priority (struct thread *t, int priority)
 void
 thread_set_priority (int priority) 
 {
-  /* if new priority is equal or greater to donation priority or there is no 
-   * donation priority then there is no donation priority so update is needed */
-  struct thread *cur = thread_current();
-  if (priority > thread_get_priority() 
-  || cur->base_priority == thread_get_priority()) {
-     cur->donation_priority = priority;
-     /* for nested donation */
-     if (cur->waiting_lock != NULL) {
-      thread_donate_priority(cur->waiting_lock->holder, priority);
-    }
-  } 
-  cur->base_priority = priority;
-  
-  /* doing context switch if there are larger priority in the ready list */
-  try_thread_yield(priority);
+//  /* if new priority is equal or greater to donation priority or there is no
+//   * donation priority then there is no donation priority so update is needed */
+//  struct thread *cur = thread_current();
+//  if (priority > thread_get_priority()
+//  || cur->base_priority == thread_get_priority()) {
+//     cur->donation_priority = priority;
+//     /* for nested donation */
+//     if (cur->waiting_lock != NULL) {
+//      thread_donate_priority(cur->waiting_lock->holder, priority);
+//    }
+//  }
+//  cur->base_priority = priority;
+//
+//  /* doing context switch if there are larger priority in the ready list */
+//  try_thread_yield(priority);
+  thread_current ()->base_priority = priority;
 }
 
 /* Returns the current thread's priority. */
@@ -473,16 +481,6 @@ int
 thread_get_priority (void) 
 {
   return thread_current ()->donation_priority;
-}
-
-bool
-sort_by_priority (const struct list_elem *_elem1, const struct list_elem
-    *_elem2, void *aux UNUSED) {
-  struct thread *t1 = list_entry (_elem1, struct thread, elem);
-  struct thread *t2 = list_entry (_elem2, struct thread, elem);
-  int priority1 = t1->base_priority;
-  int priority2 = t2->base_priority;
-  return priority1 >= priority2;
 }
 
 /* Bounding priority with the range. */
@@ -500,10 +498,12 @@ bounded_priority (struct thread *cur, int re_priority) {
 /* Recalculate priority with PRI_MAX and recent_cpu with niceness, */
 static void
 recalculate_priority (struct thread *cur, void *aux UNUSED) {
-  fp recent_cpu = cur->recent_cpu;
-  fp niceness = cur->niceness;
-  int re_priority = fp_rounding_down ((recent_cpu / 4) - (niceness * 2));
-  bounded_priority(cur, re_priority);
+  if (cur != idle_thread) {
+    fp recent_cpu = cur->recent_cpu;
+    fp niceness = cur->niceness;
+    int re_priority = fp_rounding_down((recent_cpu / 4) - (niceness * 2));
+    bounded_priority(cur, re_priority);
+  }
 }
 
 /* Increase cpu by 1 if it is not idle. */
@@ -518,16 +518,19 @@ increase_cpu (struct thread * cur) {
 /* Recalculate CPU with niceness and recent_cpu. */
 static void
 recalculate_cpu (struct thread * cur, void *aux UNUSED) {
-  /* Basic int - fp convert. */
-  fp inc = fp_int_construct (1);
-  fp niceness = fp_int_construct (cur->niceness);
-  fp recent_cpu = cur->recent_cpu;
-
-  /* recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * recent_cpu + nice */
-  fp ratio = fp_divide (2 * load_avg, (2 * load_avg) + inc);
-  fp new_cpu = fp_multiply (ratio, recent_cpu) + niceness;
-
-  cur->recent_cpu = new_cpu;
+  if (cur != idle_thread) {
+//    /* Basic int - fp convert. */
+//    fp inc = fp_int_construct(1);
+//    fp niceness = fp_int_construct(cur->niceness);
+//    fp recent_cpu = cur->recent_cpu;
+//
+//    /* recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * recent_cpu + nice */
+//    fp ratio = fp_divide (2 * load_avg, (2 * load_avg) + inc);
+//    fp new_cpu = fp_multiply (ratio, recent_cpu) + niceness;
+//
+//    cur->recent_cpu = new_cpu;
+      cur->recent_cpu = fp_int_construct (cur->niceness) + fp_multiply ()
+  }
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -558,7 +561,7 @@ recalculate_load_avg (void) {
 int
 thread_get_load_avg (void) 
 {
-  return fp_rounding_down (CONVERT_FREQ (load_avg));
+  return fp_rounding_near (CONVERT_FREQ (load_avg));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
