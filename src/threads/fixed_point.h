@@ -31,26 +31,12 @@ static inline int fp_rounding_near(fp real_number) {
 }
 
 /* Addition operations */
-static inline fp fp_add_int(fp real_number, int int_number) {
-    return real_number + int_number * FLOATING_F;
-}
-
-static inline fp int_add_fp(int int_number, fp real_number) {
-    return fp_add_int(real_number, int_number);
-}
 
 static inline fp fp_add(fp real1, fp real2) {
     return real1 + real2;
 }
 
 /* Subtraction operations */
-static inline fp fp_subtract_int(fp real_number, int int_number) {
-    return real_number - int_number * FLOATING_F;
-}
-
-static inline fp int_subtract_fp(int int_number, fp real_number) {
-    return int_number * FLOATING_F - real_number;
-}
 
 static inline fp fp_subtract(fp real1, fp real2) {
     return real1 - real2;
@@ -61,25 +47,11 @@ static inline fp fp_multiply(fp real1, fp real2) {
     return ((int64_t) real1 * real2) / FLOATING_F;
 }
 
-static inline fp fp_multiply_int(fp real_number, int int_number) {
-    return real_number * int_number;
-}
-
-static inline fp int_multiply_fp(int int_number, fp real_number) {
-    return int_number * real_number;
-}
 
 /* Division operations */
 static inline fp fp_divide(fp real1, fp real2) {
     return ((int64_t) real1 * FLOATING_F) / real2;
 }
 
-static inline fp fp_divide_int(fp real_number, int int_number) {
-    return real_number / int_number;
-}
-
-static inline fp int_divide_fp(int int_number, fp real_number) {
-    return ((int64_t) int_number * FLOATING_F) / real_number;
-}
 
 #endif //PINTOS_7_FIXED_POINT_H

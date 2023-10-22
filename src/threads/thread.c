@@ -86,6 +86,21 @@ static tid_t allocate_tid (void);
 
    It is not safe to call thread_current() until this function
    finishes. */
+
+
+/* check whether ready list's priority is larger than current priority. If yes, 
+    then yield the thread */
+void try_thread_yield (int priority) {
+if (!list_empty(&ready_list)) {
+    if(priority < list_entry(list_front(&ready_list), struct thread, elem)->priority) {
+      if(intr_context()) {
+        intr_yield_on_return();
+      } else {
+        thread_yield();
+      }
+    }
+  }
+}
 void
 thread_init (void) 
 {
@@ -147,22 +162,6 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
-  if(timer_ticks() != 0 && timer_ticks() > 2000){
-      printf("thread_tick %lld\n", timer_ticks());
-      printf("thread_tid : %d\n", thread_tid());
-      printf("thread_name : %s\n", thread_name());
-      printf("thread_get_priority : %d\n", thread_get_priority());
-      /* print ready list */
-      printf("ready_list : ");
-      struct list_elem *e;
-      for(e = list_begin(&ready_list); e != list_end(&ready_list); e = list_next(e)) {
-          struct thread *t = list_entry(e, struct thread, elem);
-          printf("%s(%d) ", t->name, t->priority);
-      }
-      printf("\n");
-      printf("\n");
-
-  }
 
 
 
@@ -190,28 +189,22 @@ thread_tick (void)
 
     /* Update priority of each thread every fourth tick */
     if(timer_ticks() % 4 == 0) {
-      /* priority = PRI_MAX - (recent_cpu / 4) - (nice * 2) */
       thread_foreach(update_priority, NULL);
       list_sort(&ready_list, compare_priority, NULL);
-      if(!list_empty(&ready_list) && thread_current()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority) {
-        if(intr_context()) {
-          intr_yield_on_return();
-        } else {
-          thread_yield();
-        }
-      }
+      try_thread_yield(t->priority);
     }
+    /* Enforce preemption. */
+    if (++thread_ticks >= TIME_SLICE)
+      intr_yield_on_return ();
   }
-  /* Enforce preemption. */
-  if (++thread_ticks >= TIME_SLICE)
-    intr_yield_on_return ();
+  
 }
 void
 update_recent_cpu(struct thread *t, void *aux UNUSED) {
   /* recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice */
   t->recent_cpu =
     fp_add(fp_construct(t->nice, 1),
-           fp_multiply(fp_divide(fp_multiply(load_avg, fp_construct(2, 1)), fp_add(fp_multiply_int(load_avg, 2), fp_construct(1, 1))), t->recent_cpu));
+           fp_multiply(fp_divide(fp_multiply(load_avg, fp_construct(2, 1)), fp_add(fp_multiply(load_avg, fp_construct(2, 1)), fp_construct(1, 1))), t->recent_cpu));
 
 }
 void
