@@ -17,6 +17,7 @@ struct semaphore
 
 bool thread_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 bool lock_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool sema_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 void sema_init (struct semaphore *, unsigned value);
 void sema_down (struct semaphore *);
