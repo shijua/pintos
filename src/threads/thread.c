@@ -391,15 +391,24 @@ thread_set_priority (int priority)
   /* if new priority is equal or greater to donation priority or there is no 
    * donation priority then there is no donation priority so update is needed */
   struct thread *cur = thread_current();
+  int prev_base_priority = cur->base_priority;
+  cur->base_priority = priority;
   if (priority > thread_get_priority() 
-  || cur->base_priority == thread_get_priority()) {
-     cur->donation_priority = priority;
+  || prev_base_priority == thread_get_priority()) {
+    cur->donation_priority = PRI_MIN;
+    /* get next maximum donation priority */
+    struct list_elem *lock_list_max = list_max(&cur->acquired_lock, lock_priority_less, NULL);
+    if (lock_list_max != NULL) {
+      struct lock *l_max = list_entry(lock_list_max, struct lock, elem);
+      cur->donation_priority = max(l_max->semaphore.max_donation, cur->base_priority);
+    } else {
+      cur->donation_priority = cur->base_priority;
+    }
      /* for nested donation */
-     if (cur->waiting_lock != NULL) {
+    if (cur->waiting_lock != NULL) {
       thread_donate_priority(cur->waiting_lock->holder, priority);
     }
-  } 
-  cur->base_priority = priority;
+  }
   
   /* doing context switch if there are larger priority in the ready list */
   try_thread_yield(priority);
