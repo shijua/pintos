@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <list.h>
 #include <debug.h>
+#define max(a, b) ((a) > (b) ? (a) : (b))
 /* A counting semaphore. */
 struct semaphore 
   {
@@ -15,6 +16,7 @@ struct semaphore
   };
 
 bool thread_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool lock_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 void sema_init (struct semaphore *, unsigned value);
 void sema_down (struct semaphore *);
@@ -27,6 +29,7 @@ struct lock
   {
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
+    struct list_elem elem;           /* List element for thread's acquired locks */
   };
 
 void lock_init (struct lock *);

@@ -544,6 +544,7 @@ init_thread (struct thread *t, const char *name, int priority)
 
   t->base_priority = priority;
   t->donation_priority = priority;
+  list_init(&t->acquired_lock);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

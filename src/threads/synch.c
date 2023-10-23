@@ -71,6 +71,7 @@ sema_down (struct semaphore *sema)
   while (sema->value == 0) 
     {
       list_insert_ordered (&sema->waiters, &thread_current ()->elem, thread_priority_less, NULL);
+      sema->max_donation = list_entry(list_back(&sema->waiters), struct thread, elem)->donation_priority;
       thread_block ();
     }
   sema->value--;
@@ -109,6 +110,12 @@ bool thread_priority_less (const struct list_elem *a, const struct list_elem *b,
   return ta->donation_priority < tb->donation_priority;
 }
 
+bool lock_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  struct lock *la = list_entry(a, struct lock, elem);
+  struct lock *lb = list_entry(b, struct lock, elem);
+  return la->semaphore.max_donation < lb->semaphore.max_donation;
+}
+
 /* Up or "V" operation on a semaphore.  Increments SEMA's value
    and wakes up one thread of those waiting for SEMA, if any.
 
@@ -126,10 +133,39 @@ sema_up (struct semaphore *sema)
     /* remove the one with highest priority */
     struct thread *remove_thread = list_entry(list_back(&sema->waiters), struct thread, elem);
     struct thread *cur = thread_current();
+    /* update new max donation after removal */
     list_remove(list_back(&sema->waiters));
+    if (list_empty(&sema->waiters)) {
+      sema->max_donation = PRI_MIN;
+    } else {
+      sema->max_donation = list_entry(list_back(&sema->waiters), struct thread, elem)->donation_priority;
+    }
 
-    /* update donated priority to base_priority */
-    cur->donation_priority = (cur->base_priority);
+    /* update donated priority to another donated priority */
+    // printf("remove thread %s\n", remove_thread->name);
+    // printf("cur thread name %s\n", cur->name);
+    /* iterate through lock */
+    // struct list_elem *e;
+    // for (e = list_begin(&cur->acquired_lock); e != list_end(&cur->acquired_lock); e = list_next(e)) {
+    //   struct lock *l = list_entry(e, struct lock, elem);
+    //   printf("lock name %s\n", l->holder->name);
+    //   printf("max donation %d\n", l->semaphore.max_donation);
+    // }
+
+    if (cur->donation_priority != cur->base_priority) {
+      cur->donation_priority = PRI_MIN;
+      struct list_elem *e_max = list_max(&cur->acquired_lock, lock_priority_less, NULL);
+      if (e_max != NULL) {
+        // printf("e_max is not null %p\n", e_max);
+        struct lock *l_max = list_entry(e_max, struct lock, elem);
+        cur->donation_priority = max(l_max->semaphore.max_donation, cur->base_priority);
+      } else {
+        // printf("e_max is null\n");
+        cur->donation_priority = cur->base_priority;
+      }
+    }
+    // printf("cur donation priority %d\n", cur->donation_priority);
+    // printf("cur base priority %d\n", cur->base_priority);
     thread_unblock (remove_thread);
   }
     
@@ -220,6 +256,7 @@ lock_acquire (struct lock *lock)
   }
   sema_down (&lock->semaphore);
   t->waiting_lock = NULL;
+  list_push_back(&t->acquired_lock, &lock->elem);
   lock->holder = t;
 }
 
@@ -253,8 +290,8 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-  // printf("sema waitors sizess: %d\n", list_size(&lock->semaphore.waiters));
   lock->holder = NULL;
+  list_remove(&lock->elem);
   sema_up (&lock->semaphore);
 }
 
