@@ -108,7 +108,8 @@ sema_try_down (struct semaphore *sema)
 bool thread_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
   struct thread *ta = list_entry(a, struct thread, elem);
   struct thread *tb = list_entry(b, struct thread, elem);
-  return ta->donation_priority < tb->donation_priority;
+  // = is for passing fifo test, need to be refactored later
+  return ta->donation_priority <= tb->donation_priority;
 }
 
 /* compare function for list_max on lock */
