@@ -13,44 +13,44 @@ typedef int32_t fp;
 
 /* Constructs a fixed-point representation from a fraction */
 static inline fp fp_construct(int numerator, int denominator) {
-    return (int64_t) numerator * FLOATING_F / denominator;
+  return (int64_t) numerator * FLOATING_F / denominator;
 }
 
 /* Converts a fixed-point value to an integer, rounding down */
 static inline int fp_rounding_down(fp real_number) {
-    return real_number / FLOATING_F;
+  return real_number / FLOATING_F;
 }
 
 /* Converts a fixed-point value to an integer, rounding to nearest */
 static inline int fp_rounding_near(fp real_number) {
-    if (real_number >= 0) {
-        return (real_number + FLOATING_F / 2) / FLOATING_F;
-    } else {
-        return (real_number - FLOATING_F / 2) / FLOATING_F;
-    }
+  if (real_number >= 0) {
+    return (real_number + FLOATING_F / 2) / FLOATING_F;
+  } else {
+    return (real_number - FLOATING_F / 2) / FLOATING_F;
+  }
 }
 
 /* Addition operations */
 
 static inline fp fp_add(fp real1, fp real2) {
-    return real1 + real2;
+  return real1 + real2;
 }
 
 /* Subtraction operations */
 
 static inline fp fp_subtract(fp real1, fp real2) {
-    return real1 - real2;
+  return real1 - real2;
 }
 
 /* Multiplication operations */
 static inline fp fp_multiply(fp real1, fp real2) {
-    return ((int64_t) real1 * real2) / FLOATING_F;
+  return ((int64_t) real1 * real2) / FLOATING_F;
 }
 
 
 /* Division operations */
 static inline fp fp_divide(fp real1, fp real2) {
-    return ((int64_t) real1 * FLOATING_F) / real2;
+  return ((int64_t) real1 * FLOATING_F) / real2;
 }
 
 
