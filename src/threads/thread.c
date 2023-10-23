@@ -369,9 +369,6 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_donate_priority (struct thread *t, int priority)
 {
-  // printf("new: %d\n", priority);
-  // printf("donate: %d %d\n", t->donation_priority, thread_current()->donation_priority);
-  // printf("name: %s %s\n", t->name, thread_current()->name);
   if (t->donation_priority < priority) {
     t->donation_priority = priority;
     /* reorder the ready list */
@@ -383,15 +380,6 @@ thread_donate_priority (struct thread *t, int priority)
     if (t->waiting_lock != NULL) {
       thread_donate_priority(t->waiting_lock->holder, priority);
     }
-    // print all element in ready list
-    // struct list_elem *e;
-    // for (e = list_begin (&ready_list); e != list_end (&ready_list);
-    //    e = list_next (e))
-    // {
-    //   struct thread *t = list_entry (e, struct thread, elem);
-    //   printf("%s %d\n", t->name, t->donation_priority);
-    // }
-    /* doing context switch after donation */
   }
   try_thread_yield(priority);
 };

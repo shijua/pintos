@@ -91,7 +91,7 @@ struct thread
     int base_priority;                  /* Base Priority. */
     int donation_priority;              /* Donation Priority. */
     struct lock *waiting_lock;          /* Lock that the thread is waiting on. */
-    struct list acquired_lock;         /* The lock that is acquired */  
+    struct list acquired_lock;          /* The lock that is acquired */  
     
     struct list_elem allelem;           /* List element for all threads list. */
 

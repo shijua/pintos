@@ -70,7 +70,7 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      list_insert_ordered (&sema->waiters, &thread_current ()->elem, thread_priority_less, NULL);
+      list_push_back (&sema->waiters, &thread_current ()->elem);
       sema->max_donation = list_entry(list_back(&sema->waiters), struct thread, elem)->donation_priority;
       thread_block ();
     }
@@ -131,41 +131,29 @@ sema_up (struct semaphore *sema)
   if (!list_empty (&sema->waiters)) 
   {
     /* remove the one with highest priority */
-    struct thread *remove_thread = list_entry(list_back(&sema->waiters), struct thread, elem);
+    struct list_elem *remove_list_max = list_max(&sema->waiters, thread_priority_less, NULL);
+    struct thread *remove_thread = list_entry(remove_list_max, struct thread, elem);
     struct thread *cur = thread_current();
+    list_remove(remove_list_max);
     /* update new max donation after removal */
-    list_remove(list_back(&sema->waiters));
     if (list_empty(&sema->waiters)) {
       sema->max_donation = PRI_MIN;
     } else {
-      sema->max_donation = list_entry(list_back(&sema->waiters), struct thread, elem)->donation_priority;
+      struct list_elem *new_thread_max = list_max(&sema->waiters, thread_priority_less, NULL);
+      sema->max_donation = list_entry(new_thread_max, struct thread, elem)->donation_priority;
     }
 
     /* update donated priority to another donated priority */
-    // printf("remove thread %s\n", remove_thread->name);
-    // printf("cur thread name %s\n", cur->name);
-    /* iterate through lock */
-    // struct list_elem *e;
-    // for (e = list_begin(&cur->acquired_lock); e != list_end(&cur->acquired_lock); e = list_next(e)) {
-    //   struct lock *l = list_entry(e, struct lock, elem);
-    //   printf("lock name %s\n", l->holder->name);
-    //   printf("max donation %d\n", l->semaphore.max_donation);
-    // }
-
     if (cur->donation_priority != cur->base_priority) {
       cur->donation_priority = PRI_MIN;
-      struct list_elem *e_max = list_max(&cur->acquired_lock, lock_priority_less, NULL);
-      if (e_max != NULL) {
-        // printf("e_max is not null %p\n", e_max);
-        struct lock *l_max = list_entry(e_max, struct lock, elem);
+      struct list_elem *lock_list_max = list_max(&cur->acquired_lock, lock_priority_less, NULL);
+      if (lock_list_max != NULL) {
+        struct lock *l_max = list_entry(lock_list_max, struct lock, elem);
         cur->donation_priority = max(l_max->semaphore.max_donation, cur->base_priority);
       } else {
-        // printf("e_max is null\n");
         cur->donation_priority = cur->base_priority;
       }
     }
-    // printf("cur donation priority %d\n", cur->donation_priority);
-    // printf("cur base priority %d\n", cur->base_priority);
     thread_unblock (remove_thread);
   }
     
