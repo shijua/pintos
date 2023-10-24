@@ -24,6 +24,8 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+#define MAX_DONATE_LEVEL 8
+#define max(a,b) a>b?a:b
 
 /* A kernel thread or user process.
 
@@ -90,10 +92,11 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int base_priority;                  /* Base Priority. */
     int donation_priority;              /* Donation Priority. */
-    struct lock *waiting_lock;           /* Lock that the thread is waiting on. */
+    struct lock *waiting_lock;          /* Lock that the thread is waiting on. */
+    struct list acquire_locks;          /* the list stored all acquired locks of the thread*/
     
     struct list_elem allelem;           /* List element for all threads list. */
-
+    struct list_elem waiting_elem;       /* list element for */
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -110,6 +113,9 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "mlfqs". */
 extern bool thread_mlfqs;
+
+// compare the maximum priority of the locks
+bool lock_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 void thread_init (void);
 void thread_start (void);
@@ -136,7 +142,7 @@ void try_thread_yield (int priority);
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
-void thread_donate_priority (struct thread *t, int priority);
+void thread_donate_priority (struct thread *t, int priority, int);
 int thread_get_priority (void);
 void thread_set_priority (int);
 

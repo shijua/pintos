@@ -367,7 +367,7 @@ thread_foreach (thread_action_func *func, void *aux)
 
 
 void
-thread_donate_priority (struct thread *t, int priority)
+thread_donate_priority (struct thread *t, int priority, int level)
 {
   // printf("new: %d\n", priority);
   // printf("donate: %d %d\n", t->donation_priority, thread_current()->donation_priority);
@@ -380,8 +380,11 @@ thread_donate_priority (struct thread *t, int priority)
       list_insert_ordered(&ready_list, &t->elem, thread_priority_less, NULL);
     }
     /* for nested donation */
-    if (t->waiting_lock != NULL) {
-      thread_donate_priority(t->waiting_lock->holder, priority);
+    if (t->waiting_lock != NULL && t->waiting_lock->semaphore.max_donation < priority) {
+       t -> waiting_lock->semaphore.max_donation = priority;
+      //if(level < MAX_DONATE_LEVEL) {
+        thread_donate_priority(t -> waiting_lock->holder, priority, level + 1);
+      //}
     }
     // print all element in ready list
     // struct list_elem *e;
@@ -403,15 +406,26 @@ thread_set_priority (int priority)
   /* if new priority is equal or greater to donation priority or there is no 
    * donation priority then there is no donation priority so update is needed */
   struct thread *cur = thread_current();
-  if (priority > thread_get_priority() 
-  || cur->base_priority == thread_get_priority()) {
-     cur->donation_priority = priority;
-     /* for nested donation */
-     if (cur->waiting_lock != NULL) {
-      thread_donate_priority(cur->waiting_lock->holder, priority);
+  if (priority >= cur->donation_priority)
+  {
+    cur->base_priority = priority;
+    cur->donation_priority = priority;
+  }else if(cur->base_priority == cur->donation_priority){
+    cur->base_priority = priority;
+    if(list_empty(&cur-> acquire_locks)){
+      cur->donation_priority = priority;
+    } else{
+      cur->donation_priority = max(list_entry(list_max(&cur-> acquire_locks, lock_priority_less, NULL), struct lock, elem) -> semaphore.max_donation, cur->base_priority);
     }
+  }else{
+    cur->base_priority = priority;
+  }
+  /* for nested donation */
+  if (cur->waiting_lock != NULL) {
+    reset_lock_donation(&cur -> waiting_lock->semaphore);
+    thread_donate_priority(cur->waiting_lock->holder, priority, 1);
   } 
-  cur->base_priority = priority;
+
   
   /* doing context switch if there are larger priority in the ready list */
   try_thread_yield(priority);
@@ -544,6 +558,7 @@ init_thread (struct thread *t, const char *name, int priority)
 
   t->base_priority = priority;
   t->donation_priority = priority;
+  list_init(&t->acquire_locks);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -659,6 +674,13 @@ allocate_tid (void)
   lock_release (&tid_lock);
 
   return tid;
+}
+
+bool 
+lock_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  struct lock *ta = list_entry(a, struct lock, elem);
+  struct lock *tb = list_entry(b, struct lock, elem);
+  return ta -> semaphore.max_donation < tb -> semaphore.max_donation;
 }
 
 /* Offset of `stack' member within `struct thread'.
