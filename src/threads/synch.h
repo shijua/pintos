@@ -31,6 +31,7 @@ struct lock
   };
 
 void reset_lock_donation (struct semaphore *);
+bool sema_elem_less (const struct list_elem *, const struct list_elem *, void *);
 
 void lock_init (struct lock *);
 void lock_acquire (struct lock *);
