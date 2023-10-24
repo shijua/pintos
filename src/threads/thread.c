@@ -687,17 +687,21 @@ allocate_tid (void)
 
   return tid;
 }
+
 bool
-compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-  return list_entry(a, struct thread, elem)->priority > list_entry(b, struct thread, elem)->priority;
+compare_priority (const struct list_elem *a, const struct list_elem *b, void
+    *aux UNUSED) {
+  return list_entry (a, struct thread, elem)->priority > list_entry(b, struct
+      thread, elem)->priority;
 }
+
 void
-set_priority(struct thread *t, int new_priority) {
-    if(new_priority > PRI_MAX) {
+set_priority (struct thread *t, int new_priority) {
+    if (new_priority > PRI_MAX) {
         new_priority = PRI_MAX;
-    } else if(new_priority < PRI_MIN) {
+    } else if (new_priority < PRI_MIN) {
         new_priority = PRI_MIN;
-    }else{
+    }else {
         t->priority = new_priority;
     }
 }
