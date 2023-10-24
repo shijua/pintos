@@ -22,9 +22,18 @@ typedef int tid_t;
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
-#define PRI_MIN 0                       /* Lowest priority. */
+#define PRI_MIN 0                       /* Lowest priority.  */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/* Thread niceness. */
+#define NICE_MIN -20                    /* Lowest niceness.  */
+#define NICE_DEFAULT 0                  /* Default niceness. */
+#define NICE_MAX 20                     /* Highest niceness. */
+
+/* Ratio for load_avg calculate. */
+#define RATIO_LOAD fp_construct (59, 60)    /* Coefficient for load_avg. */
+#define RATIO_LIST fp_construct (1, 60)     /* Coefficient for list.     */
 
 /* A kernel thread or user process.
 
@@ -144,9 +153,11 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-void update_recent_cpu(struct thread *t, void *aux UNUSED);
-void update_priority(struct thread *t, void *aux UNUSED);
-void set_priority(struct thread *t, int new_priority);
-bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void update_load_avg (size_t);
+void update_recent_cpu (struct thread *t, void *aux UNUSED);
+void update_priority (struct thread *t, void *aux UNUSED);
+void set_priority (struct thread *t, int new_priority);
+bool compare_priority (const struct list_elem *a, const struct list_elem *b,
+    void *aux UNUSED);
 
 #endif /* threads/thread.h */
