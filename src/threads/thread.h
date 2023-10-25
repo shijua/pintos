@@ -106,8 +106,6 @@ struct thread
     int priority;                       /* Donation Priority for Donation, priority for BSD */
     struct lock *waiting_lock;          /* Lock that the thread is waiting on. */
     struct list acquire_locks;          /* the list stored all acquired locks of the thread*/
-    struct lock set_priority_lock;      /* the lock used to prevent 
-                                          race condition of setting donation*/
     struct list_elem allelem;           /* List element for all threads list. */
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

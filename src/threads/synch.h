@@ -31,7 +31,6 @@ struct lock
 
 void reset_lock_donation (struct semaphore *);
 
-// TODO
 // compare the maximum priority of the locks
 list_less_func lock_priority_less;
 list_less_func thread_priority_less;
