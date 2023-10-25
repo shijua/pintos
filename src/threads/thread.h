@@ -25,7 +25,8 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 #define MAX_DONATE_LEVEL 8
-#define max(a,b) a>b?a:b
+#define max(a,b) a > b ? a : b
+#define getThread(THREAD_ELEM) list_entry(THREAD_ELEM, struct thread, elem)
 
 /* A kernel thread or user process.
 
@@ -94,6 +95,8 @@ struct thread
     int donation_priority;              /* Donation Priority. */
     struct lock *waiting_lock;          /* Lock that the thread is waiting on. */
     struct list acquire_locks;          /* the list stored all acquired locks of the thread*/
+    struct lock set_priority_lock;      /* the lock used to prevent 
+                                          race condition of setting donation*/
     
     struct list_elem allelem;           /* List element for all threads list. */
     struct list_elem waiting_elem;       /* list element for */
@@ -114,9 +117,6 @@ struct thread
    Controlled by kernel command-line option "mlfqs". */
 extern bool thread_mlfqs;
 
-// compare the maximum priority of the locks
-bool lock_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-
 void thread_init (void);
 void thread_start (void);
 size_t threads_ready(void);
@@ -125,7 +125,7 @@ void thread_tick (void);
 void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
-tid_t thread_create (const char *name, int priority, thread_func *, void *);
+tid_t thread_create (const char *, int, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);

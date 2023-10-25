@@ -6,14 +6,14 @@
 #include <list.h>
 #include <debug.h>
 /* A counting semaphore. */
+
+#define getLock(LOCK_ELEM) list_entry(LOCK_ELEM, struct lock, elem)
 struct semaphore 
   {
     uint8_t max_donation;
     unsigned value;             /* Current value. */
     struct list waiters;        /* List of waiting threads. */
   };
-
-bool thread_priority_less (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
 void sema_init (struct semaphore *, unsigned value);
 void sema_down (struct semaphore *);
@@ -31,7 +31,11 @@ struct lock
   };
 
 void reset_lock_donation (struct semaphore *);
-bool sema_elem_less (const struct list_elem *, const struct list_elem *, void *);
+
+// compare the maximum priority of the locks
+list_less_func lock_priority_less;
+list_less_func thread_priority_less;
+list_less_func sema_elem_less;
 
 void lock_init (struct lock *);
 void lock_acquire (struct lock *);
