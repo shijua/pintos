@@ -34,11 +34,11 @@
 
 void 
 reset_lock_donation (struct semaphore *sema) {
-  if(!list_empty(&sema->waiters)){
+  if(!list_empty(&sema->waiters))
     sema->max_donation = getThread(list_max(&sema->waiters, thread_priority_less, NULL))->donation_priority;
-  }else {
+  else 
     sema->max_donation = PRI_MIN;
-  }
+  
 };
 
 
@@ -140,9 +140,11 @@ sema_up (struct semaphore *sema)
       cur->donation_priority = max(cur->base_priority, 
                                    getLock(list_back(&cur->acquire_locks))->semaphore.max_donation);
     }
-    if(!list_empty(&remove_thread->acquire_locks)){
-      remove_thread->donation_priority
-        = getLock(list_back(&remove_thread->acquire_locks))->semaphore.max_donation;
+    if(list_empty(&cur->acquire_locks)){
+      remove_thread->donation_priority = remove_thread->base_priority;
+    } else{
+      remove_thread->donation_priority = max(remove_thread->base_priority, 
+                                   getLock(list_back(&remove_thread->acquire_locks))->semaphore.max_donation);
     }
     thread_unblock (remove_thread);
   }
@@ -274,7 +276,6 @@ lock_release (struct lock *lock)
   lock->holder = NULL;
   list_remove(&lock->elem);
   sema_up (&lock->semaphore);
-  reset_lock_donation(&lock->semaphore);
 }
 
 /* Returns true if the current thread holds LOCK, false
