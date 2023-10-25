@@ -94,7 +94,7 @@ static tid_t allocate_tid (void);
 void
 try_thread_yield (int priority) {
   if (!list_empty (&ready_list)) {
-    if (priority < list_entry(list_back(&ready_list), struct thread, elem)->priority) {
+    if (priority < list_entry(list_max(&ready_list, thread_priority_less, NULL), struct thread, elem)->priority) {
       if (intr_context())
         intr_yield_on_return();
       else
@@ -182,13 +182,13 @@ thread_tick (void)
 
       /* Update recent_cpu for all threads */
       thread_foreach (update_recent_cpu, NULL);
-      list_sort (&ready_list, thread_priority_less, NULL);
+      // list_sort (&ready_list, thread_priority_less, NULL);
     }
 
     /* Update priority of each thread every fourth tick */
     if(timer_ticks() % 4 == 0) {
       thread_foreach (update_priority, NULL);
-      list_sort (&ready_list, thread_priority_less, NULL);
+      // list_sort (&ready_list, thread_priority_less, NULL);
       try_thread_yield (t->priority);
     }
   }
@@ -338,7 +338,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   /* Insert thread into ready list in order */
-  list_insert_ordered (&ready_list, &t->elem, thread_priority_less, NULL);
+  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -406,7 +406,7 @@ thread_yield (void)
   ASSERT (!intr_context ());
   old_level = intr_disable ();
   if (cur != idle_thread)
-    list_insert_ordered (&ready_list, &cur->elem, thread_priority_less, NULL);
+    list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -439,7 +439,7 @@ thread_donate_priority (struct thread *t, int priority, int level)
     /* reorder the ready list */
     if (t->status == THREAD_READY) {
       list_remove(&t->elem);
-      list_insert_ordered(&ready_list, &t->elem, thread_priority_less, NULL);
+      list_push_back(&ready_list, &t->elem);
     }
     /* for nested donation */
     if (t->waiting_lock != NULL && t->waiting_lock->semaphore.max_donation < priority) {
@@ -674,8 +674,11 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  else
-    return list_entry (list_pop_back(&ready_list), struct thread, elem);
+  else {
+    struct list_elem *e = list_max (&ready_list, thread_priority_less, NULL);
+    list_remove (e);
+    return list_entry (e, struct thread, elem);
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
