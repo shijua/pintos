@@ -3,10 +3,13 @@
 
 #include <list.h>
 #include <stdbool.h>
-
+#include <list.h>
+#include <debug.h>
+#define getLock(LOCK_ELEM) list_entry(LOCK_ELEM, struct lock, elem)
 /* A counting semaphore. */
 struct semaphore 
   {
+    uint8_t max_donation;
     unsigned value;             /* Current value. */
     struct list waiters;        /* List of waiting threads. */
   };
@@ -20,9 +23,19 @@ void sema_self_test (void);
 /* Lock. */
 struct lock 
   {
+    uint8_t donation_level;
+    struct list_elem elem;      /* elements that used to build a sorted list by max_donation */
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
   };
+
+void reset_lock_donation (struct semaphore *);
+
+// TODO
+// compare the maximum priority of the locks
+list_less_func lock_priority_less;
+list_less_func thread_priority_less;
+list_less_func sema_elem_less;
 
 void lock_init (struct lock *);
 void lock_acquire (struct lock *);

@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "threads/fixed_point.h"
 #include "devices/timer.h"
+#include "synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -22,9 +23,12 @@ typedef int tid_t;
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
-#define PRI_MIN 0                       /* Lowest priority.  */
+#define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+#define MAX_DONATE_LEVEL 8
+#define max(a,b) a > b ? a : b
+#define getThread(THREAD_ELEM) list_entry(THREAD_ELEM, struct thread, elem)
 
 /* Thread niceness. */
 #define NICE_MIN -20                    /* Lowest niceness.  */
@@ -98,9 +102,13 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
-    int priority;                       /* Priority. */
+    int base_priority;                  /* Base Priority. Only used in base_priority */
+    int priority;                       /* Donation Priority for Donation, priority for BSD */
+    struct lock *waiting_lock;          /* Lock that the thread is waiting on. */
+    struct list acquire_locks;          /* the list stored all acquired locks of the thread*/
+    struct lock set_priority_lock;      /* the lock used to prevent 
+                                          race condition of setting donation*/
     struct list_elem allelem;           /* List element for all threads list. */
-
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -145,6 +153,7 @@ void thread_yield (void);
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
+void thread_donate_priority (struct thread *t, int priority, int);
 int thread_get_priority (void);
 void thread_set_priority (int);
 
