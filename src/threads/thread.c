@@ -164,8 +164,6 @@ thread_tick (void)
 
   /* BSD Scheduler */
   if (thread_mlfqs) {
-//    printf("%lld", timer_ticks ());
-//    printf(" %d\n", thread_current()->tid);
     /* Update recent_cpu for all threads */
     if (t != idle_thread) {
       t->recent_cpu = (t->recent_cpu) + FP_INT_CONSTRUCT (1);
