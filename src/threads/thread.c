@@ -446,13 +446,13 @@ thread_donate_priority (struct thread *t, int priority, int level)
         t->waiting_lock->semaphore.max_donation < priority) {
         t->waiting_lock->semaphore.max_donation = priority;
         intr_set_level (old_level);
-        thread_donate_priority(t->waiting_lock->holder, priority, level + 1);
-        try_thread_yield(priority);
+        thread_donate_priority (t->waiting_lock->holder, priority, level + 1);
+        try_thread_yield (priority);
         return;
     }
   }
   intr_set_level (old_level);
-  try_thread_yield(priority);
+  try_thread_yield (priority);
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -466,8 +466,8 @@ thread_set_priority (int priority)
   }
   /* if new priority is equal or greater to donation priority or there is no 
    * donation priority then there is no donation priority so update is needed */
-  struct thread *cur = thread_current();
   lock_acquire (&thread_priority_lock);
+  struct thread *cur = thread_current();
   int pre = cur->priority;
   cur->base_priority = priority;
   /* if new priority is larger then donation set directly
@@ -483,14 +483,7 @@ thread_set_priority (int priority)
     }
   }
   
-  /* for nested donation */
-  if (cur->waiting_lock != NULL) {
-    reset_lock_donation (&cur->waiting_lock->semaphore);
-    lock_release (&thread_priority_lock);
-    thread_donate_priority (cur->waiting_lock->holder, priority, 1);
-  } else {
-    lock_release (&thread_priority_lock);
-  }
+  lock_release (&thread_priority_lock);
   /* doing context switch if there are larger priority in the ready list */
   try_thread_yield (priority);
 }
