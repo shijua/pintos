@@ -436,8 +436,6 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_donate_priority (struct thread *t, int32_t priority, uint8_t level)
 {
-  enum intr_level old_level;
-  old_level = intr_disable ();
   if (t->priority < priority) {
     t->priority = priority;
     /* for nested donation
@@ -447,15 +445,11 @@ thread_donate_priority (struct thread *t, int32_t priority, uint8_t level)
     if (t->waiting_lock != NULL &&
         t->waiting_lock->semaphore.max_donation < priority) {
         t->waiting_lock->semaphore.max_donation = priority;
-        intr_set_level (old_level);
         if (level < MAX_DONATE_LEVEL) {
           thread_donate_priority (t->waiting_lock->holder, priority, level + 1);
         }
-        try_thread_yield (priority);
-        return;
     }
   }
-  intr_set_level (old_level);
   try_thread_yield (priority);
 }
 
