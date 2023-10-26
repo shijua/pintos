@@ -98,26 +98,28 @@ typedef int tid_t;
 struct thread
   {
     /* Owned by thread.c. */
-    tid_t tid;                          /* Thread identifier. */
-    enum thread_status status;          /* Thread state. */
-    char name[16];                      /* Name (for debugging purposes). */
-    uint8_t *stack;                     /* Saved stack pointer. */
-    int nice;                           /* Nice value. */
-    fp recent_cpu;                      /* Recent CPU. */
+    tid_t tid;                   /* Thread identifier. */
+    enum thread_status status;   /* Thread state. */
+    char name[16];               /* Name (for debugging purposes). */
+    uint8_t *stack;              /* Saved stack pointer. */
+    int8_t nice;                 /* Nice value. */
+    fp recent_cpu;               /* Recent CPU. */
     /* Shared between thread.c and synch.c. */
-    struct list_elem elem;              /* List element. */
-    int base_priority;                  /* Base Priority. Only used in base_priority */
-    int priority;                       /* Donation Priority for Donation, priority for BSD */
-    struct lock *waiting_lock;          /* Lock that the thread is waiting on. */
-    struct list acquire_locks;          /* the list stored all acquired locks of the thread*/
-    struct list_elem allelem;           /* List element for all threads list. */
+    struct list_elem elem;       /* List element. */
+    int32_t base_priority;        /* Base Priority. Only used in base_priority */
+    int32_t priority;             /* Donation Priority for 
+                                    Donation, priority for BSD */
+    struct lock *waiting_lock;   /* Lock that the thread is waiting on. */
+    struct list acquire_locks;   /* the list stored all 
+                                    acquired locks of the thread */
+    struct list_elem allelem;    /* List element for all threads list. */
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
+    uint32_t *pagedir;           /* Page directory. */
 #endif
 
     /* Owned by thread.c. */
-    unsigned magic;                     /* Detects stack overflow. */
+    unsigned magic;              /* Detects stack overflow. */
   };
 
 /* If false (default), use round-robin scheduler.
@@ -125,7 +127,7 @@ struct thread
    Controlled by kernel command-line option "mlfqs". */
 extern bool thread_mlfqs;
 
-void try_thread_yield (int priority);
+void try_thread_yield (int32_t priority);
 void thread_init (void);
 void thread_start (void);
 size_t threads_ready(void);
@@ -134,7 +136,7 @@ void thread_tick (void);
 void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
-tid_t thread_create (const char *name, int priority, thread_func *, void *);
+tid_t thread_create (const char *name, int32_t priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
@@ -150,14 +152,14 @@ void thread_yield (void);
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
-void thread_donate_priority (struct thread *t, int priority, int level);
-int thread_get_priority (void);
-void thread_set_priority (int);
+void thread_donate_priority (struct thread *t, int32_t priority, uint8_t level);
+int32_t thread_get_priority (void);
+void thread_set_priority (int32_t);
 
-int thread_get_nice (void);
-void thread_set_nice (int);
-int thread_get_recent_cpu (void);
-int thread_get_load_avg (void);
+int8_t thread_get_nice (void);
+void thread_set_nice (int8_t);
+fp thread_get_recent_cpu (void);
+fp thread_get_load_avg (void);
 
 void update_load_avg (size_t);
 void update_recent_cpu (struct thread *t, void *aux UNUSED);

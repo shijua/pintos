@@ -8,7 +8,7 @@
 /* A counting semaphore. */
 struct semaphore 
   {
-    uint8_t max_donation;
+    int8_t max_donation;
     unsigned value;             /* Current value. */
     struct list waiters;        /* List of waiting threads. */
   };
@@ -22,8 +22,8 @@ void sema_self_test (void);
 /* Lock. */
 struct lock 
   {
-    uint8_t donation_level;
-    struct list_elem elem;      /* elements that used to build a sorted list by max_donation */
+    struct list_elem elem;      /* elements that used to build a 
+                                    sorted list by max_donation */
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
   };
@@ -47,7 +47,7 @@ void cond_broadcast (struct condition *, struct lock *);
 
 void reset_lock_donation (struct semaphore *);
 
-// compare the maximum priority of the locks
+// compare the maximum priority of the locks, thread and sema
 list_less_func lock_priority_less;
 list_less_func thread_priority_less;
 list_less_func sema_elem_less;

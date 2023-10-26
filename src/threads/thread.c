@@ -71,7 +71,7 @@ static void kernel_thread (thread_func *, void *aux);
 static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
 static struct thread *next_thread_to_run (void);
-static void init_thread (struct thread *, const char *name, int priority);
+static void init_thread (struct thread *, const char *name, int32_t priority);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
@@ -95,9 +95,10 @@ static tid_t allocate_tid (void);
 /* check whether ready list's priority is larger than current priority. 
    If yes, then yield the thread */
 void
-try_thread_yield (int priority) {
+try_thread_yield (int32_t priority) {
   if (!list_empty (&ready_list)) {
-    if (priority < getThread(list_max(&ready_list, thread_priority_less, NULL))->priority) {
+    if (priority < getThread (list_max (&ready_list, 
+                              thread_priority_less, NULL))->priority) {
       if (intr_context())
         intr_yield_on_return();
       else
@@ -220,7 +221,7 @@ update_priority (struct thread *t, void *aux UNUSED) {
   fp fp_priority_max = FP_INT_CONSTRUCT (PRI_MAX);
   fp fp_recent_cpu = fp_divide (t->recent_cpu, FP_INT_CONSTRUCT (4));
   fp fp_niceness = FP_INT_CONSTRUCT (t->nice * 2);
-  int new_priority = fp_subtract (fp_subtract (fp_priority_max,
+  fp new_priority = fp_subtract (fp_subtract (fp_priority_max,
                                                fp_recent_cpu), fp_niceness);
   /* control priority into this range */
   t->priority = fp_rounding_down (new_priority);
@@ -255,7 +256,7 @@ thread_print_stats (void)
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
 tid_t
-thread_create (const char *name, int priority,
+thread_create (const char *name, int32_t priority,
                thread_func *function, void *aux)
 {
   struct thread *t;
@@ -433,7 +434,7 @@ thread_foreach (thread_action_func *func, void *aux)
 
 /* Function that will donate priority, stops when level exceed 8 */
 void
-thread_donate_priority (struct thread *t, int priority, int level)
+thread_donate_priority (struct thread *t, int32_t priority, uint8_t level)
 {
   enum intr_level old_level;
   old_level = intr_disable ();
@@ -457,7 +458,7 @@ thread_donate_priority (struct thread *t, int priority, int level)
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
-thread_set_priority (int priority)
+thread_set_priority (int32_t priority)
 {
   /* BSD will only set the priority */
   if (thread_mlfqs) {
@@ -468,7 +469,7 @@ thread_set_priority (int priority)
    * donation priority then there is no donation priority so update is needed */
   lock_acquire (&thread_priority_lock);
   struct thread *cur = thread_current();
-  int pre = cur->priority;
+  int32_t pre = cur->priority;
   cur->base_priority = priority;
   /* if new priority is larger then donation set directly
    * else if donation priority is same as base then */
@@ -489,7 +490,7 @@ thread_set_priority (int priority)
 }
 
 /* Returns the current thread's priority. */
-int
+int32_t
 thread_get_priority (void)
 {
   return thread_current ()->priority;
@@ -497,7 +498,7 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice(int nice UNUSED) 
+thread_set_nice (int8_t nice) 
 {
   thread_current ()->nice = nice;
   thread_current ()->priority = fp_rounding_down(
@@ -512,21 +513,21 @@ thread_set_nice(int nice UNUSED)
 }
 
 /* Returns the current thread's nice value. */
-int
+int8_t
 thread_get_nice (void)
 {
   return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
-int
+fp
 thread_get_load_avg (void)
 {
   return HUNDRED (load_avg);
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
-int
+fp
 thread_get_recent_cpu (void)
 {
   return HUNDRED (thread_current ()->recent_cpu);
@@ -605,7 +606,7 @@ is_thread (struct thread *t)
 /* Does basic initialization of T as a blocked thread named
    NAME. */
 static void
-init_thread (struct thread *t, const char *name, int priority)
+init_thread (struct thread *t, const char *name, int32_t priority)
 {
   enum intr_level old_level;
 

@@ -433,7 +433,7 @@ lock_priority_less (const struct list_elem *a, const struct list_elem *b,
   return ta->semaphore.max_donation < tb->semaphore.max_donation;
 }
 
-/* compare function used to compare semaphore by their semaphore max donation*/
+/* compare function used to compare semaphore by their semaphore max donation */
 bool
 sema_elem_less (const struct list_elem *a, const struct list_elem *b, 
                 void *aux UNUSED) 
