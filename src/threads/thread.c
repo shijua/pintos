@@ -442,12 +442,15 @@ thread_donate_priority (struct thread *t, int32_t priority, uint8_t level)
     t->priority = priority;
     /* for nested donation
       Check waiting lock exists or not and max level does not exceeded
-      And the max donation is smaller then current priority  */
-    if (t->waiting_lock != NULL && level < MAX_DONATE_LEVEL &&
+      And the max donation is smaller then current priority  
+      t->waiting_lock exists ensures that holder is exists */
+    if (t->waiting_lock != NULL &&
         t->waiting_lock->semaphore.max_donation < priority) {
         t->waiting_lock->semaphore.max_donation = priority;
         intr_set_level (old_level);
-        thread_donate_priority (t->waiting_lock->holder, priority, level + 1);
+        if (level < MAX_DONATE_LEVEL) {
+          thread_donate_priority (t->waiting_lock->holder, priority, level + 1);
+        }
         try_thread_yield (priority);
         return;
     }
