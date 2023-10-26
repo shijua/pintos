@@ -32,15 +32,6 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
-/* function used for update the donation that this lock(that hold sema) have */
-void
-reset_lock_donation (struct semaphore *sema) {
-  if (!list_empty(&sema->waiters)) 
-    sema->max_donation = getThread (list_max(&sema->waiters, 
-                                    thread_priority_less, NULL))->priority;
-  else
-    sema->max_donation = PRI_MIN;
-}
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -78,6 +69,7 @@ sema_down (struct semaphore *sema)
   while (sema->value == 0)
     {
       list_push_back (&sema->waiters, &t->elem);
+      /* update max donation as new elment added at donation scheduler */
       if (!thread_mlfqs)
         reset_lock_donation(sema);
       thread_block ();
@@ -138,12 +130,14 @@ sema_up (struct semaphore *sema)
       list_remove (&remove_thread->elem);
       reset_lock_donation (sema);
       /* update donated priority for cur and remove_thread to base_priority */
+      /* update current as accqire_locks changes */
       if (list_empty (&cur->acquire_locks)) {
         cur->priority = cur->base_priority;
       } else {
         cur->priority = max (cur->base_priority,
           getLock (list_back (&cur->acquire_locks))->semaphore.max_donation);
       }
+      /* update remove_thread to ensure it is correct */
       if (list_empty (&remove_thread->acquire_locks)) {
         remove_thread->priority = remove_thread->base_priority;
       } else {
@@ -405,6 +399,17 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
+}
+
+/* function used for update the donation that this lock(that hold sema) have */
+void
+reset_lock_donation (struct semaphore *sema) 
+{
+  if (!list_empty(&sema->waiters)) 
+    sema->max_donation = getThread (list_max(&sema->waiters, 
+                                    thread_priority_less, NULL))->priority;
+  else
+    sema->max_donation = PRI_MIN;
 }
 
 /* compare functions first is to compare the 

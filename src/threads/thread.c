@@ -92,8 +92,8 @@ static tid_t allocate_tid (void);
    It is not safe to call thread_current() until this function
    finishes. */
 
-/* check whether ready list's priority is larger than current priority. If yes,
-    then yield the thread */
+/* check whether ready list's priority is larger than current priority. 
+   If yes, then yield the thread */
 void
 try_thread_yield (int priority) {
   if (!list_empty (&ready_list)) {
@@ -222,7 +222,13 @@ update_priority (struct thread *t, void *aux UNUSED) {
   fp fp_niceness = FP_INT_CONSTRUCT (t->nice * 2);
   int new_priority = fp_subtract (fp_subtract (fp_priority_max,
                                                fp_recent_cpu), fp_niceness);
-  set_priority (t, fp_rounding_down (new_priority));
+  /* control priority into this range */
+  t->priority = fp_rounding_down (new_priority);
+  if (t->priority > PRI_MAX) {
+    t->priority = PRI_MAX;
+  } else if (t->priority < PRI_MIN) {
+    t->priority = PRI_MIN;
+  }
 }
 
 /* Prints thread statistics. */
@@ -431,25 +437,21 @@ thread_donate_priority (struct thread *t, int priority, int level)
 {
   enum intr_level old_level;
   old_level = intr_disable ();
-  // lock_acquire (&thread_priority_lock);
   if (t->priority < priority) {
     t->priority = priority;
-    /* for nested donation */
-    if (t->waiting_lock != NULL && t->waiting_lock->semaphore.max_donation < priority) {
-      t->waiting_lock->semaphore.max_donation = priority;
-      /* If max donation exceed */
-      if (level < MAX_DONATE_LEVEL) {
-        // lock_release (&thread_priority_lock);
+    /* for nested donation
+      Check waiting lock exists or not and max level does not exceeded
+      And the max donation is smaller then current priority  */
+    if (t->waiting_lock != NULL && level < MAX_DONATE_LEVEL &&
+        t->waiting_lock->semaphore.max_donation < priority) {
+        t->waiting_lock->semaphore.max_donation = priority;
         intr_set_level (old_level);
         thread_donate_priority(t->waiting_lock->holder, priority, level + 1);
-      }
-    } else {
-      intr_set_level (old_level);
+        try_thread_yield(priority);
+        return;
     }
-  } else {
-    intr_set_level (old_level);
   }
-  // lock_release (&thread_priority_lock);
+  intr_set_level (old_level);
   try_thread_yield(priority);
 }
 
@@ -459,7 +461,7 @@ thread_set_priority (int priority)
 {
   /* BSD will only set the priority */
   if (thread_mlfqs) {
-    thread_current()->priority = priority;
+    thread_current ()->priority = priority;
     return;
   }
   /* if new priority is equal or greater to donation priority or there is no 
@@ -468,15 +470,16 @@ thread_set_priority (int priority)
   lock_acquire (&thread_priority_lock);
   int pre = cur->priority;
   cur->base_priority = priority;
+  /* if new priority is larger then donation set directly
+   * else if donation priority is same as base then */
   if (priority >= cur->priority) {
     cur->priority = priority;
   } else if (pre == cur->priority) {
     if(list_empty (&cur->acquire_locks)) {
       cur->priority = priority;
     } else {
-      cur->priority
-        = max(getLock(list_back(&cur->acquire_locks))->semaphore.max_donation, 
-                                                      cur->base_priority);
+      cur->priority = max(getLock(list_back(&cur->acquire_locks))
+                          ->semaphore.max_donation, cur->base_priority);
     }
   }
   
@@ -501,7 +504,8 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice(int nice UNUSED) {
+thread_set_nice(int nice UNUSED) 
+{
   thread_current ()->nice = nice;
   thread_current ()->priority = fp_rounding_down(
       fp_subtract(
@@ -751,17 +755,6 @@ allocate_tid (void)
   lock_release (&tid_lock);
 
   return tid;
-}
-
-void
-set_priority (struct thread *t, int new_priority) {
-    if (new_priority > PRI_MAX) {
-        new_priority = PRI_MAX;
-    } else if (new_priority < PRI_MIN) {
-        new_priority = PRI_MIN;
-    }else {
-        t->priority = new_priority;
-    }
 }
 
 /* Offset of `stack' member within `struct thread'.

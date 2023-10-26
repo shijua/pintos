@@ -3,7 +3,6 @@
 
 #include <list.h>
 #include <stdbool.h>
-#include <list.h>
 #include <debug.h>
 #define getLock(LOCK_ELEM) list_entry(LOCK_ELEM, struct lock, elem)
 /* A counting semaphore. */
@@ -29,13 +28,6 @@ struct lock
     struct semaphore semaphore; /* Binary semaphore controlling access. */
   };
 
-void reset_lock_donation (struct semaphore *);
-
-// compare the maximum priority of the locks
-list_less_func lock_priority_less;
-list_less_func thread_priority_less;
-list_less_func sema_elem_less;
-
 void lock_init (struct lock *);
 void lock_acquire (struct lock *);
 bool lock_try_acquire (struct lock *);
@@ -52,6 +44,13 @@ void cond_init (struct condition *);
 void cond_wait (struct condition *, struct lock *);
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
+
+void reset_lock_donation (struct semaphore *);
+
+// compare the maximum priority of the locks
+list_less_func lock_priority_less;
+list_less_func thread_priority_less;
+list_less_func sema_elem_less;
 
 /* Optimization barrier.
 

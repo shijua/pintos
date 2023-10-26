@@ -102,16 +102,15 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
+    int nice;                           /* Nice value. */
+    fp recent_cpu;                      /* Recent CPU. */
+    /* Shared between thread.c and synch.c. */
+    struct list_elem elem;              /* List element. */
     int base_priority;                  /* Base Priority. Only used in base_priority */
     int priority;                       /* Donation Priority for Donation, priority for BSD */
     struct lock *waiting_lock;          /* Lock that the thread is waiting on. */
     struct list acquire_locks;          /* the list stored all acquired locks of the thread*/
     struct list_elem allelem;           /* List element for all threads list. */
-    /* Shared between thread.c and synch.c. */
-    struct list_elem elem;              /* List element. */
-
-    int nice;                           /* Nice value. */
-    fp recent_cpu;                      /* Recent CPU. */
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -151,7 +150,7 @@ void thread_yield (void);
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
-void thread_donate_priority (struct thread *t, int priority, int);
+void thread_donate_priority (struct thread *t, int priority, int level);
 int thread_get_priority (void);
 void thread_set_priority (int);
 
@@ -163,8 +162,5 @@ int thread_get_load_avg (void);
 void update_load_avg (size_t);
 void update_recent_cpu (struct thread *t, void *aux UNUSED);
 void update_priority (struct thread *t, void *aux UNUSED);
-void set_priority (struct thread *t, int new_priority);
-bool compare_priority (const struct list_elem *a, const struct list_elem *b,
-    void *aux UNUSED);
 
 #endif /* threads/thread.h */
