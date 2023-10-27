@@ -46,6 +46,7 @@ void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
 
 void reset_lock_donation (struct semaphore *);
+void sema_priority_from_acquires (struct thread *);
 
 // compare the maximum priority of the locks, thread and sema
 list_less_func lock_priority_less;

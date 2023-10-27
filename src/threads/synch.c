@@ -61,7 +61,7 @@ void
 sema_down (struct semaphore *sema)
 {
   enum intr_level old_level;
-  struct thread* t = thread_current();
+  struct thread* t = thread_current ();
   ASSERT (sema != NULL);
   ASSERT (!intr_context ());
 
@@ -69,9 +69,9 @@ sema_down (struct semaphore *sema)
   while (sema->value == 0)
     {
       list_push_back (&sema->waiters, &t->elem);
-      /* update max donation as new elment added at donation scheduler */
+      /* update max donation as new element added at donation scheduler */
       if (!thread_mlfqs)
-        reset_lock_donation(sema);
+        reset_lock_donation (sema);
       thread_block ();
     }
   sema->value--;
@@ -130,27 +130,27 @@ sema_up (struct semaphore *sema)
       list_remove (&remove_thread->elem);
       reset_lock_donation (sema);
       /* update donated priority for cur and remove_thread to base_priority */
-      /* update current as accqire_locks changes */
-      if (list_empty (&cur->acquire_locks)) {
-        cur->priority = cur->base_priority;
-      } else {
-        cur->priority = max (cur->base_priority,
-          getLock (list_back (&cur->acquire_locks))->semaphore.max_donation);
-      }
+      /* update current as acquire_locks changes */
+      sema_priority_from_acquires (cur);
       /* update remove_thread to ensure it is correct */
-      if (list_empty (&remove_thread->acquire_locks)) {
-        remove_thread->priority = remove_thread->base_priority;
-      } else {
-        remove_thread->priority = max (remove_thread->base_priority,
-          getLock (list_back (&remove_thread->acquire_locks))
-                              ->semaphore.max_donation);
-      }
-      thread_unblock(remove_thread);
+      sema_priority_from_acquires (remove_thread);
+      thread_unblock (remove_thread);
     }
   }
   sema->value++;
   intr_set_level (old_level);
-  try_thread_yield(thread_current()->priority);
+  try_thread_yield (thread_current ()->priority);
+}
+
+/* Reset priority of thread, comparing base_priority with max_donation. */
+void
+sema_priority_from_acquires (struct thread *t) {
+  if (list_empty (&t->acquire_locks)) {
+    t->priority = t->base_priority;
+  } else {
+    t->priority = max (t->base_priority, getLock (list_back
+      (&t->acquire_locks))->semaphore.max_donation);
+  }
 }
 
 static void sema_test_helper (void *sema_);
@@ -228,13 +228,14 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
-  struct thread* t = thread_current();
+  struct thread* t = thread_current ();
   if (!thread_mlfqs) {
     t->waiting_lock = lock;
     if (lock->holder != NULL) {
       thread_donate_priority (lock->holder, t->priority, 1);
     }
   }
+
   sema_down (&lock->semaphore);
   if (!thread_mlfqs) {
     list_insert_ordered (&t->acquire_locks, &lock->elem, 
@@ -260,7 +261,7 @@ lock_try_acquire (struct lock *lock)
 
   success = sema_try_down (&lock->semaphore);
   if (success) {
-    struct thread* t = thread_current();
+    struct thread* t = thread_current ();
     lock->holder = t;
     if (!thread_mlfqs) {
       list_insert_ordered (&t->acquire_locks, &lock->elem, 
@@ -282,7 +283,7 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   lock->holder = NULL;
   if (!thread_mlfqs) {
-    list_remove(&lock->elem);
+    list_remove (&lock->elem);
   }
   sema_up (&lock->semaphore);
 }
