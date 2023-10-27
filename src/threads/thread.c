@@ -479,8 +479,9 @@ thread_set_priority (int32_t priority)
       /* update priority by max donation priority */
       enum intr_level old_level;
       old_level = intr_enable ();
-      cur->priority = max(getLock(list_back(&cur->acquire_locks))
-                          ->semaphore.max_donation, cur->base_priority);
+      cur->priority = max(getLock(
+                      list_max(&cur->acquire_locks, lock_priority_less, NULL))
+                                ->semaphore.max_donation, cur->base_priority);
       intr_set_level (old_level);
     }
   }

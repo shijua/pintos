@@ -148,8 +148,8 @@ sema_priority_from_acquires (struct thread *t) {
   if (list_empty (&t->acquire_locks)) {
     t->priority = t->base_priority;
   } else {
-    t->priority = max (t->base_priority, getLock (list_back
-      (&t->acquire_locks))->semaphore.max_donation);
+    t->priority = max (t->base_priority, getLock (list_max (&t->acquire_locks, 
+                        lock_priority_less, NULL))->semaphore.max_donation);
   }
 }
 
@@ -238,8 +238,7 @@ lock_acquire (struct lock *lock)
 
   sema_down (&lock->semaphore);
   if (!thread_mlfqs) {
-    list_insert_ordered (&t->acquire_locks, &lock->elem, 
-                        lock_priority_less, NULL);
+    list_push_back (&t->acquire_locks, &lock->elem);
     t->waiting_lock = NULL;
   }
   lock->holder = t;
@@ -264,8 +263,7 @@ lock_try_acquire (struct lock *lock)
     struct thread* t = thread_current ();
     lock->holder = t;
     if (!thread_mlfqs) {
-      list_insert_ordered (&t->acquire_locks, &lock->elem, 
-                           lock_priority_less, NULL);
+      list_push_back (&t->acquire_locks, &lock->elem);
     }
   }
   return success;
