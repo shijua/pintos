@@ -235,7 +235,6 @@ lock_acquire (struct lock *lock)
       thread_donate_priority (lock->holder, t->priority, 1);
     }
   }
-
   sema_down (&lock->semaphore);
   if (!thread_mlfqs) {
     list_insert_ordered (&t->acquire_locks, &lock->elem, 

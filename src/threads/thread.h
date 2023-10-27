@@ -39,6 +39,9 @@ typedef int tid_t;
 #define RATIO_LOAD fp_construct (59, 60)    /* Coefficient for load_avg. */
 #define RATIO_LIST fp_construct (1, 60)     /* Coefficient for list.     */
 
+/* Lock used for thread_set_priority() */
+static struct semaphore thread_priority_sema;
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
