@@ -40,7 +40,7 @@ typedef int tid_t;
 #define RATIO_LIST fp_construct (1, 60)     /* Coefficient for list.     */
 
 /* Lock used for thread_set_priority() */
-static struct semaphore thread_priority_sema;
+struct semaphore thread_priority_sema;
 
 /* A kernel thread or user process.
 

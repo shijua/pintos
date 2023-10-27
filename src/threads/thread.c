@@ -481,8 +481,9 @@ thread_set_priority (int32_t priority)
       cur->priority = priority;
     } else {
       /* update priority by max donation priority */
-      cur->priority = max (getLock (list_max (&cur->acquire_locks))
-                          ->semaphore.max_donation, cur->base_priority);
+      cur->priority = max (getLock (
+                      list_max (&cur->acquire_locks, lock_priority_less, NULL))
+                                ->semaphore.max_donation, cur->base_priority);
     }
   }
   sema_up (&thread_priority_sema);
