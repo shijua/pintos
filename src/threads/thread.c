@@ -467,18 +467,21 @@ thread_set_priority (int32_t priority)
    * donation priority then there is no donation priority so update is needed */
   lock_acquire (&thread_priority_lock);
   struct thread *cur = thread_current();
-  int32_t pre = cur->priority;
   cur->base_priority = priority;
   /* if new priority is larger then donation set directly
    * else if donation priority is same as base then */
   if (priority >= cur->priority) {
     cur->priority = priority;
-  } else if (pre == cur->priority) {
+  } else {
     if(list_empty (&cur->acquire_locks)) {
       cur->priority = priority;
     } else {
+      /* update priority by max donation priority */
+      enum intr_level old_level;
+      old_level = intr_enable ();
       cur->priority = max(getLock(list_back(&cur->acquire_locks))
                           ->semaphore.max_donation, cur->base_priority);
+      intr_set_level (old_level);
     }
   }
   
