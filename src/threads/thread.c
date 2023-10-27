@@ -40,9 +40,6 @@ static struct thread *initial_thread;
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
-/* Lock used for thread_set_priority() */
-static struct lock thread_priority_lock;
-
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame
   {
@@ -113,7 +110,7 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
-  lock_init (&thread_priority_lock);
+  sema_init (&thread_priority_sema, 1);
   list_init (&ready_list);
   list_init (&all_list);
 
@@ -437,6 +434,7 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_donate_priority (struct thread *t, int32_t priority, uint8_t level)
 {
+  sema_down (&thread_priority_sema);
   if (t->priority < priority) {
     t->priority = priority;
     /* for nested donation
@@ -446,10 +444,15 @@ thread_donate_priority (struct thread *t, int32_t priority, uint8_t level)
     if (t->waiting_lock != NULL &&
         t->waiting_lock->semaphore.max_donation < priority) {
         t->waiting_lock->semaphore.max_donation = priority;
+        sema_up (&thread_priority_sema);
         if (level < MAX_DONATE_LEVEL) {
           thread_donate_priority (t->waiting_lock->holder, priority, level + 1);
         }
+    } else{
+      sema_up (&thread_priority_sema);
     }
+  } else{
+    sema_up (&thread_priority_sema);
   }
   try_thread_yield (priority);
 }
@@ -461,11 +464,12 @@ thread_set_priority (int32_t priority)
   /* BSD will only set the priority */
   if (thread_mlfqs) {
     thread_current ()->priority = priority;
+    try_thread_yield (priority);
     return;
   }
+  sema_down (&thread_priority_sema);
   /* if new priority is equal or greater to donation priority or there is no 
    * donation priority then there is no donation priority so update is needed */
-  lock_acquire (&thread_priority_lock);
   struct thread *cur = thread_current();
   cur->base_priority = priority;
   /* if new priority is larger then donation set directly
@@ -477,16 +481,12 @@ thread_set_priority (int32_t priority)
       cur->priority = priority;
     } else {
       /* update priority by max donation priority */
-      enum intr_level old_level;
-      old_level = intr_enable ();
-      cur->priority = max(getLock(
-                      list_max(&cur->acquire_locks, lock_priority_less, NULL))
-                                ->semaphore.max_donation, cur->base_priority);
-      intr_set_level (old_level);
+      cur->priority = max (getLock (list_max (&cur->acquire_locks))
+                          ->semaphore.max_donation, cur->base_priority);
     }
   }
+  sema_up (&thread_priority_sema);
   
-  lock_release (&thread_priority_lock);
   /* doing context switch if there are larger priority in the ready list */
   try_thread_yield (priority);
 }
