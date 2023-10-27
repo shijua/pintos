@@ -99,10 +99,11 @@ try_thread_yield (int32_t priority) {
   if (!list_empty (&ready_list)) {
     if (priority < getThread (list_max (&ready_list, 
                               thread_priority_less, NULL))->priority) {
-      if (intr_context())
-        intr_yield_on_return();
-      else
-        thread_yield();
+      if (intr_context ()) {
+        intr_yield_on_return ();
+      } else {
+        thread_yield ();
+      }
     }
   }
 }
@@ -187,7 +188,7 @@ thread_tick (void)
     }
 
     /* Update priority of each thread every fourth tick */
-    if(timer_ticks() % 4 == 0) {
+    if(timer_ticks () % 4 == 0) {
       thread_foreach (update_priority, NULL);
       try_thread_yield (t->priority);
     }
@@ -393,7 +394,7 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  list_remove (&thread_current()->allelem);
+  list_remove (&thread_current ()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -493,11 +494,23 @@ thread_get_priority (void)
   return thread_current ()->priority;
 }
 
+/* Bound the value of nice. */
+int8_t
+bound_nice (int8_t nice) {
+  if (nice > NICE_MAX) {
+    return NICE_MAX;
+  } else if (nice < NICE_MIN) {
+    return NICE_MIN;
+  } else {
+    return nice;
+  }
+}
+
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int8_t nice) 
 {
-  thread_current ()->nice = nice;
+  thread_current ()->nice = bound_nice (nice);
   thread_current ()->priority = fp_rounding_down(
       fp_subtract(
           fp_subtract(

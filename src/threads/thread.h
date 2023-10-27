@@ -160,6 +160,7 @@ int8_t thread_get_nice (void);
 void thread_set_nice (int8_t);
 fp thread_get_recent_cpu (void);
 fp thread_get_load_avg (void);
+int8_t bound_nice (int8_t);
 
 void update_load_avg (size_t);
 void update_recent_cpu (struct thread *t, void *aux UNUSED);

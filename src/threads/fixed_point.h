@@ -14,17 +14,17 @@
 typedef int32_t fp;
 
 /* Negative sign for real numbers. */
-#define IS_NEGATIVE(rn) ((rn & SIGN_BIT) != 0)
-#define NEGATIVE(rn) (rn ^ SIGN_BIT)
+#define IS_NEGATIVE(RN) ((RN & SIGN_BIT) != 0)
+#define NEGATIVE(RN) (RN ^ SIGN_BIT)
 
 /* Absolute value for real numbers. */
-#define ABS(rn) (IS_NEGATIVE(rn) ? NEGATIVE(rn) : rn)
+#define ABS(RN) (IS_NEGATIVE(RN) ? NEGATIVE(RN) : RN)
 
 /* Calculate timer_freq numbers. */
-#define CONVERT_FREQ(rn) (rn * TIMER_FREQ)
+#define CONVERT_FREQ(RN) (RN * TIMER_FREQ)
 
 /* Constructor for int. */
-#define FP_INT_CONSTRUCT(rn) (fp_construct(rn, 1))
+#define FP_INT_CONSTRUCT(RN) (fp_construct (RN, 1))
 
 /* Constructs a fixed-point representation from a fraction */
 static inline fp fp_construct (int numerator, int denominator) {
