@@ -18,3 +18,17 @@ syscall_handler (struct intr_frame *f UNUSED)
   printf ("system call!\n");
   thread_exit ();
 }
+
+/* Process halt. */
+static void 
+syscall_halt (void) {
+  shutdown_power_off ();
+}
+
+/* Process Termination Messages. */
+static void 
+syscall_exit (int status) {
+  struct thread *cur = thread_current ();
+  printf ("%s: exit(%d)\n", cur->name, status);
+  thread_exit ();
+}
