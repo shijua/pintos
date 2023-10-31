@@ -100,6 +100,10 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+
+    /* Parent tid. */
+    tid_t parent;                       /* tid number for parent. */
+    
   };
 
 /* If false (default), use round-robin scheduler.
