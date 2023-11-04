@@ -29,32 +29,57 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+  char *fn_copy2;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
+  fn_copy2 = palloc_get_page(0);
   if (fn_copy == NULL)
     return TID_ERROR;
+  if (fn_copy2 == NULL)
+    return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (fn_copy2, file_name, PGSIZE);
 
   /* Argument Passing. */
-  char *rest;
-  file_name = strtok_r ((char *) file_name, " ", &rest);
+  struct list *parameterList = malloc(sizeof(struct list));
+  list_init(parameterList);
+  
+  char *token;
+  char *cpointer = fn_copy;
+  token = strtok_r(cpointer, " ", &cpointer);
+  
+  while(token != NULL){
+    if(strlen(token) > 0) {
+      // use malloc, otherwise the variable get in the loop will be the same.
+      struct parameterValue *para = malloc(sizeof(struct parameterValue));
+      para -> data = token;
+      list_push_front(parameterList, &para->elem);
+    }
+    token = strtok_r(cpointer, " ", &cpointer);
+  }
+  // struct list_elem *e;
+  // for(e = list_begin(parameterList); e != list_end(parameterList); e = list_next (e)){
+  //   printf("%s\n", getParameter(e) -> data);
+  // };
+  char *fileName = getParameter(list_back(parameterList)) -> data;
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (fileName, PRI_DEFAULT, start_process, parameterList);
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (fn_copy);
+  
   return tid;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *parameterList)
 {
-  char *file_name = file_name_;
+  char *file_name = getParameter(list_back(parameterList)) -> data;
   struct intr_frame if_;
   bool success;
 
@@ -66,10 +91,46 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  // palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
 
+
+  int * _esp = (int *)&if_.esp;
+  struct list_elem *e;
+  int index = 0;
+  char *para;
+  int size = 0;
+  for(e = list_begin(parameterList); e != list_end(parameterList); e = list_next (e)){
+    para = getParameter(e) -> data;
+    *_esp -= strlen(para) + 1;
+    index += strlen(para) + 1;
+    strlcpy((char *)if_.esp, para, strlen(para) + 1);
+    getParameter(e) ->address = (unsigned)if_.esp;
+    size++;
+  };
+  int mod = index % 4 == 0 ? 0 : 4 - (index % 4);
+  *_esp -= mod;
+  memset((char *)if_.esp, 0, mod);
+  index += mod;
+  *_esp -= 4;
+  memset((char *)if_.esp, 0, 4);
+  index += mod;
+  int add;
+  for(e = list_begin(parameterList); e != list_end(parameterList); e = list_next (e)){
+    add = getParameter(e) -> address;
+    *_esp -= 4;
+    index += 4;
+    memcpy ((char *)if_.esp, &(add), 4);
+  };
+  *_esp -= 4;
+  int argv = (int)if_.esp + 4;
+  memcpy ((char *)if_.esp, &argv, 4);
+  *_esp -= 4;
+  memcpy ((char *)if_.esp, &size, 4);
+  *_esp -= 4;
+  memset ((char *)if_.esp, 0, 4);
+  hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, 1);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -92,6 +153,9 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  while(true){
+
+  }
   return -1;
 }
 
@@ -101,7 +165,8 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-
+  // printf("%s: exit(%d)", thread_name(), cur ->)
+  
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
