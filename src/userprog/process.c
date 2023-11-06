@@ -29,19 +29,19 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
-  char *fn_copy2;
+  // char *fn_copy2;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
-  fn_copy2 = palloc_get_page(0);
+  // fn_copy2 = palloc_get_page(0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  if (fn_copy2 == NULL)
-    return TID_ERROR;
+  // if (fn_copy2 == NULL)
+  //   return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
-  strlcpy (fn_copy2, file_name, PGSIZE);
+  // strlcpy (fn_copy2, file_name, PGSIZE);
 
   /* Argument Passing. */
   struct list *parameterList = malloc(sizeof(struct list));
@@ -101,6 +101,7 @@ start_process (void *parameterList)
   int index = 0;
   char *para;
   int size = 0;
+  // argv
   for(e = list_begin(parameterList); e != list_end(parameterList); e = list_next (e)){
     para = getParameter(e) -> data;
     *_esp -= strlen(para) + 1;
@@ -109,12 +110,15 @@ start_process (void *parameterList)
     getParameter(e) ->address = (unsigned)if_.esp;
     size++;
   };
+  // word align
   int mod = index % 4 == 0 ? 0 : 4 - (index % 4);
   *_esp -= mod;
   memset((char *)if_.esp, 0, mod);
+  // argv[4]
   index += mod;
   *_esp -= 4;
   memset((char *)if_.esp, 0, 4);
+  // argv[3]
   index += mod;
   int add;
   for(e = list_begin(parameterList); e != list_end(parameterList); e = list_next (e)){
@@ -123,11 +127,14 @@ start_process (void *parameterList)
     index += 4;
     memcpy ((char *)if_.esp, &(add), 4);
   };
+  // argv
   *_esp -= 4;
   int argv = (int)if_.esp + 4;
   memcpy ((char *)if_.esp, &argv, 4);
+  // argc
   *_esp -= 4;
   memcpy ((char *)if_.esp, &size, 4);
+  // return address
   *_esp -= 4;
   memset ((char *)if_.esp, 0, 4);
   hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, 1);
@@ -165,7 +172,6 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-  // printf("%s: exit(%d)", thread_name(), cur ->)
   
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
