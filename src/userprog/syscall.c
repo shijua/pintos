@@ -131,8 +131,11 @@ static void
 syscall_write (int fd, const void *buffer, unsigned size) {
   // pagedir_set_page(fd, buffer, buffer, true);
   /* Writes size bytes from buffer to the open file fd */
-  // putbuf (buffer, size);
   printf ("write(%d, %p, %d)\n", fd, buffer, size);
+  /* temperary version for write to console */
+  if (fd == 1) {
+    putbuf (buffer, size);
+  }
 }
 
 static void
