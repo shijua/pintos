@@ -88,7 +88,7 @@ syscall_halt (void) {
 static void 
 syscall_exit (int status) {
   printf ("%s: exit(%d)\n", thread_current ()->name, status);
-  process_exit ();
+  thread_exit ();
 }
 
 // TODO synchronisation is needed later
