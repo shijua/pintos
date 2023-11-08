@@ -7,8 +7,8 @@
 static void syscall_handler (struct intr_frame *);
 static void syscall_halt (void);
 static void syscall_exit (int);
-static void syscall_exec (const char *);
-static void syscall_wait (pid_t);
+static pid_t syscall_exec (const char *);
+static int syscall_wait (pid_t);
 static void syscall_create (const char *, unsigned);
 static void syscall_remove (const char *);
 static void syscall_open (const char *);
@@ -31,6 +31,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   // retrieve the system call number
   int syscall_num = *(int *) f->esp;
   printf ("system call number: %d\n", syscall_num);
+  int return_val;
   // switch on the system call number
   switch (syscall_num) {
     case SYS_HALT:
@@ -40,10 +41,14 @@ syscall_handler (struct intr_frame *f UNUSED)
       syscall_exit (*(int *) (f->esp + 4));
       break;
     case SYS_EXEC:
-      syscall_exec (*(char **) (f->esp + 4));
+      return_val = syscall_exec (*(char **) (f->esp + 4));
+      if (return_val != -1) {
+          f->eax = return_val;
+      }
       break;
     case SYS_WAIT:
-      syscall_wait (*(pid_t *) (f->esp + 4));
+      return_val = syscall_wait (*(pid_t *) (f->esp + 4));
+      f->eax = return_val;
       break;
     case SYS_CREATE:
       syscall_create (*(char **) (f->esp + 4), *(unsigned *) (f->esp + 8));
@@ -98,14 +103,21 @@ syscall_exit (int status) {
 }
 
 // TODO synchronisation is needed later
-static void
+static pid_t
 syscall_exec (const char *cmd_line) {
   printf ("exec(%s)\n", cmd_line);
+  enum intr_level old_level = intr_disable ();
+  lock_acquire (&child_lock);
+  pid_t pid = process_execute (cmd_line);
+  lock_release (&child_lock);
+  intr_set_level (old_level);
+  return pid;
 }
 
-static void
+static int
 syscall_wait (pid_t pid) {
   printf ("wait(%d)\n", pid);
+  return process_wait (pid);
 }
 
 static void

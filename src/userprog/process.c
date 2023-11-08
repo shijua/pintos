@@ -161,9 +161,21 @@ int
 process_wait (tid_t child_tid UNUSED) 
 {
   struct thread *parent = thread_current();
-  parent->wait = true;
-
+  
+  // printf("wait for %d\n", child_tid);
+  // // iterate through child_list and print element
+  // struct list_elem *e;
+  // struct thread *child;
+  // lock_acquire (&child_lock);
+  // for(e = list_begin(&parent->child_list); e != list_end(&parent->child_list); e = list_next (e)) {
+  //   child = list_entry(e, struct thread, child_elem);
+  //   printf("child %d %d", child->tid, child->wait);
+  // }
+  // printf("\n");
+  // lock_release (&child_lock);
+  
   while(true){
+    
     struct list_elem *e;
     struct thread *child;
     lock_acquire (&child_lock);
@@ -173,15 +185,18 @@ process_wait (tid_t child_tid UNUSED)
         break;
       }
     }
+    lock_release (&child_lock);
     // if child name not found then TID is invalid or TID is terminated
     if(e == list_end(&parent->child_list)){
+      parent->wait = true;
       return -1;
     }
     // if child has already called wait
     if (child != NULL && child->wait == true){
+      parent->wait = true;
       return -1;
     }
-    lock_release (&child_lock);
+    
   }
   return -1;
 }
