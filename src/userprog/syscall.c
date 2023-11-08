@@ -87,8 +87,14 @@ syscall_halt (void) {
    exit status to the kernal. */
 static void 
 syscall_exit (int status) {
+  // no need to uncomment this printf
   printf ("%s: exit(%d)\n", thread_current ()->name, status);
+  // struct thread *cur = thread_current ();
+  lock_acquire (&child_lock);
+  list_remove (&thread_current ()->child_elem);
+  lock_release (&child_lock);
   thread_exit ();
+  NOT_REACHED ();
 }
 
 // TODO synchronisation is needed later
