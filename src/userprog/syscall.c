@@ -7,7 +7,7 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "devices/input.h"
-
+#include "threads/synch.h"
 
 static void syscall_handler(struct intr_frame *);
 static void syscall_halt(void);
@@ -23,10 +23,12 @@ static int syscall_write(int, const void *, unsigned);
 static void syscall_seek(int, unsigned);
 static void syscall_tell(int);
 static void syscall_close(int);
-
+/* set a global lock for file system */
+struct lock file_lock;
 void
 syscall_init(void) {
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init(&file_lock); // initialize the lock
 }
 
 static void
@@ -112,20 +114,25 @@ syscall_wait(pid_t pid) {
 static bool
 syscall_create(const char *file, unsigned initial_size) {
 //  printf("create(%s, %d)\n", file, initial_size);
+  lock_acquire(&file_lock);
   bool success = filesys_create(file, initial_size);
+  lock_release(&file_lock);
   return success;
 }
 
 static bool
 syscall_remove(const char *file) {
 //  printf("remove(%s)\n", file);
+  lock_acquire(&file_lock);
   bool success = filesys_remove(file);
+  lock_release(&file_lock);
   return success;
 }
 
 static int
 syscall_open(const char *file) {
 //  printf ("open(%s)\n", file);
+  lock_acquire(&file_lock);
   struct file *f = filesys_open(file);
   if (f == NULL) {
     return -1;
@@ -135,6 +142,7 @@ syscall_open(const char *file) {
     info->file = f;
     list_push_back(&thread_current()->file_list, &info->elem);
   }
+  lock_release(&file_lock);
   return thread_current()->fd++;
 }
 
@@ -156,10 +164,12 @@ get_file_info(int fd) {
 static int
 syscall_filesize(int fd) {
 //  printf("filesize(%d)\n", fd);
+  lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
   if (info) {
     return file_length(info->file);
   }
+  lock_release(&file_lock);
   return -1;
 }
 
@@ -174,11 +184,12 @@ syscall_read(int fd, void *buffer, unsigned size) {
     }
     return size;
   }
-
+  lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
   if (info) {
     return file_read(info->file, buffer, size);
   }
+  lock_release(&file_lock);
   return -1;
 }
 
@@ -191,11 +202,12 @@ syscall_write(int fd, const void *buffer, unsigned size) {
     putbuf(buffer, size);//TODO it could be a big buffer
     return size;
   }
-
+  lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
   if (info) {
     return file_write(info->file, buffer, size);
   }
+  lock_release(&file_lock);
   return -1;
 }
 
@@ -203,27 +215,34 @@ syscall_write(int fd, const void *buffer, unsigned size) {
 static void
 syscall_seek(int fd, unsigned position) {
 //  printf("seek(%d, %d)\n", fd, position);
+  lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
   if (info) {
     file_seek(info->file, position);
   }
+  lock_release(&file_lock);
 }
 
 static void
 syscall_tell(int fd) {
+//  printf("tell(%d)\n", fd);
+  lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
   if (info) {
     file_tell(info->file);
   }
+  lock_release(&file_lock);
 }
 
 static void
 syscall_close(int fd) {
 //  printf("close(%d)\n", fd);
+  lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
   if (info) {
     file_close(info->file);
     list_remove(&info->elem);
     free(info);
   }
+  lock_release(&file_lock);
 }
