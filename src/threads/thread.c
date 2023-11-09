@@ -91,6 +91,7 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
+  lock_init (&child_lock);
   list_init (&ready_list);
   list_init (&all_list);
 
@@ -190,6 +191,7 @@ thread_create (const char *name, int priority,
 
   /* Initialize thread. */
   init_thread (t, name, priority);
+  list_push_back (&thread_current ()->child_list, &t->child_elem);
   tid = t->tid = allocate_tid ();
 
   /* initialize file list */
@@ -484,6 +486,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  /* for task 2*/
+  t->wait = false;
+  list_init (&t->child_list);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

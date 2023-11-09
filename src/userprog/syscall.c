@@ -12,8 +12,8 @@
 static void syscall_handler(struct intr_frame *);
 static void syscall_halt(void);
 static void syscall_exit(int);
-static void syscall_exec(const char *);
-static void syscall_wait(pid_t);\
+static pid_t syscall_exec(const char *);
+static int syscall_wait(pid_t);
 static bool syscall_create(const char *, unsigned);
 static bool syscall_remove(const char *);
 static int syscall_open(const char *);
@@ -38,7 +38,8 @@ syscall_handler(struct intr_frame *f UNUSED) {
 
   // retrieve the system call number
   int syscall_num = *(int *) f->esp;
-  printf("system call number: %d\n", syscall_num);
+  // printf ("system call number: %d\n", syscall_num);
+  int return_val;
   // switch on the system call number
   switch (syscall_num) {
     case SYS_HALT:
@@ -48,10 +49,13 @@ syscall_handler(struct intr_frame *f UNUSED) {
       syscall_exit(*(int *) (f->esp + 4));
       break;
     case SYS_EXEC:
-      syscall_exec(*(char **) (f->esp + 4));
+      return_val = syscall_exec (*(char **) (f->esp + 4));
+      if (return_val != -1) {
+          f->eax = return_val;
+      }
       break;
     case SYS_WAIT:
-      syscall_wait(*(pid_t * )(f->esp + 4));
+      syscall_wait (*(pid_t *) (f->esp + 4));
       break;
     case SYS_CREATE:
       syscall_create(*(char **) (f->esp + 4), *(unsigned *) (f->esp + 8));
@@ -93,27 +97,40 @@ syscall_halt(void) {
 
 /* Terminates the current user program, sending its 
    exit status to the kernal. */
-static void
-syscall_exit(int status) {
-  printf("%s: exit(%d)\n", thread_current()->name, status);
-  thread_exit();
+static void 
+syscall_exit (int status) {
+  // no need to uncomment this printf
+  printf ("%s: exit(%d)\n", thread_current ()->name, status);
+  // struct thread *cur = thread_current ();
+  lock_acquire (&child_lock);
+  list_remove (&thread_current ()->child_elem);
+  lock_release (&child_lock);
+  thread_exit ();
+  NOT_REACHED ();
 }
 
 // TODO synchronisation is needed later
-static void
-syscall_exec(const char *cmd_line) {
-  printf("exec(%s)\n", cmd_line);
+static pid_t
+syscall_exec (const char *cmd_line) {
+  // printf ("exec(%s)\n", cmd_line);
+  enum intr_level old_level = intr_disable ();
+  lock_acquire (&child_lock);
+  pid_t pid = process_execute (cmd_line);
+  lock_release (&child_lock);
+  intr_set_level (old_level);
+  return pid;
 }
 
-static void
-syscall_wait(pid_t pid) {
-  printf("wait(%d)\n", pid);
+static int
+syscall_wait (pid_t pid) {
+  // printf ("wait(%d)\n", pid);
+  return process_wait (pid);
 }
 
 // We ignore the synchronization problem for now.
 static bool
 syscall_create(const char *file, unsigned initial_size) {
-//  printf("create(%s, %d)\n", file, initial_size);
+//  // printf("create(%s, %d)\n", file, initial_size);
   lock_acquire(&file_lock);
   bool success = filesys_create(file, initial_size);
   lock_release(&file_lock);
@@ -122,7 +139,7 @@ syscall_create(const char *file, unsigned initial_size) {
 
 static bool
 syscall_remove(const char *file) {
-//  printf("remove(%s)\n", file);
+//  // printf("remove(%s)\n", file);
   lock_acquire(&file_lock);
   bool success = filesys_remove(file);
   lock_release(&file_lock);
@@ -131,7 +148,7 @@ syscall_remove(const char *file) {
 
 static int
 syscall_open(const char *file) {
-//  printf ("open(%s)\n", file);
+//  // printf ("open(%s)\n", file);
   lock_acquire(&file_lock);
   struct file *f = filesys_open(file);
   if (f == NULL) {
@@ -163,7 +180,7 @@ get_file_info(int fd) {
 
 static int
 syscall_filesize(int fd) {
-//  printf("filesize(%d)\n", fd);
+//  // printf("filesize(%d)\n", fd);
   lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
   if (info) {
@@ -175,7 +192,7 @@ syscall_filesize(int fd) {
 
 static int
 syscall_read(int fd, void *buffer, unsigned size) {
-//  printf("read(%d, %s, %d)\n", fd, buffer, size);
+//  // printf("read(%d, %s, %d)\n", fd, buffer, size);
   // Reads size bytes from the open file fd into buffer
   if (fd == 0) {
     // Standard input reading
@@ -195,7 +212,7 @@ syscall_read(int fd, void *buffer, unsigned size) {
 
 static int
 syscall_write(int fd, const void *buffer, unsigned size) {
-//  printf("write(%d, %s, %d)\n", fd, buffer, size);
+//  // printf("write(%d, %s, %d)\n", fd, buffer, size);
   // Writes size bytes from buffer to the open file fd
   if (fd == 1) {
     // Standard output writing
@@ -214,7 +231,7 @@ syscall_write(int fd, const void *buffer, unsigned size) {
 
 static void
 syscall_seek(int fd, unsigned position) {
-//  printf("seek(%d, %d)\n", fd, position);
+//  // printf("seek(%d, %d)\n", fd, position);
   lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
   if (info) {
@@ -225,7 +242,7 @@ syscall_seek(int fd, unsigned position) {
 
 static void
 syscall_tell(int fd) {
-//  printf("tell(%d)\n", fd);
+//  // printf("tell(%d)\n", fd);
   lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
   if (info) {
@@ -236,7 +253,7 @@ syscall_tell(int fd) {
 
 static void
 syscall_close(int fd) {
-//  printf("close(%d)\n", fd);
+//  // printf("close(%d)\n", fd);
   lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
   if (info) {
