@@ -203,7 +203,7 @@ syscall_write(int fd, const void *buffer, unsigned size) {
 static void
 syscall_seek(int fd, unsigned position) {
 //  printf("seek(%d, %d)\n", fd, position);
-  Fileinfo *info = get_file_info(fd);
+  struct File_info *info = get_file_info(fd);
   if (info) {
     file_seek(info->file, position);
   }
@@ -211,7 +211,7 @@ syscall_seek(int fd, unsigned position) {
 
 static void
 syscall_tell(int fd) {
-  Fileinfo *info = get_file_info(fd);
+  struct File_info *info = get_file_info(fd);
   if (info) {
     file_tell(info->file);
   }
@@ -220,7 +220,7 @@ syscall_tell(int fd) {
 static void
 syscall_close(int fd) {
 //  printf("close(%d)\n", fd);
-  Fileinfo *info = get_file_info(fd);
+  struct File_info *info = get_file_info(fd);
   if (info) {
     file_close(info->file);
     list_remove(&info->elem);
