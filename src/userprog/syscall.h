@@ -4,6 +4,7 @@
 
 #define STATUS_SUCC 0
 #define STATUS_FAIL -1
+#define USER_BOTTOM ((void *) 0x0804800)
 #include "threads/thread.h"
 #include <list.h>
 /* Process identifier. */

@@ -1,4 +1,5 @@
 #include "userprog/syscall.h"
+#include "userprog/pagedir.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <syscall-nr.h>
@@ -8,6 +9,7 @@
 #include "filesys/filesys.h"
 #include "devices/input.h"
 #include "threads/synch.h"
+#include "threads/vaddr.h"
 
 static void syscall_handler(struct intr_frame *);
 static void syscall_halt(void);
@@ -23,6 +25,9 @@ static int syscall_write(int, const void *, unsigned);
 static void syscall_seek(int, unsigned);
 static void syscall_tell(int);
 static void syscall_close(int);
+
+static void *check_validation(uint32_t *, const void *);
+
 /* set a global lock for file system */
 struct lock file_lock;
 void
@@ -37,7 +42,9 @@ syscall_handler(struct intr_frame *f UNUSED) {
 //  lock_init (&syscall_lock);
 
   // retrieve the system call number
-  int syscall_num = *(int *) f->esp;
+  uint32_t cur_pd = thread_current ()->pagedir;
+  int syscall_num = *((int *) check_validation (cur_pd, f->esp));
+
   // printf ("system call number: %d\n", syscall_num);
   int return_val;
   // switch on the system call number
@@ -262,4 +269,17 @@ syscall_close(int fd) {
     free(info);
   }
   lock_release(&file_lock);
+}
+
+static void *check_validation(uint32_t *pd, const void *vaddr) {
+  void *kernal_vaddr = pagedir_get_page (pd, vaddr);
+  if (vaddr == NULL || !is_user_vaddr (vaddr)) {
+    thread_exit ();
+  } else {
+    if (kernal_vaddr == NULL) {
+      thread_exit ();
+    } else {
+      return kernal_vaddr;
+    }
+  }
 }
