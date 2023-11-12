@@ -158,6 +158,7 @@ static int
 syscall_open(const char *file) {
 //  // printf ("open(%s)\n", file);
   lock_acquire(&file_lock);
+  check_null_file(file);
   struct file *f = filesys_open(file);
   if (f == NULL) {
     return -1;
@@ -191,17 +192,17 @@ syscall_filesize(int fd) {
 //  // printf("filesize(%d)\n", fd);
   lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
-  if (info) {
-    return file_length(info->file);
-  }
+  check_null_file(info->file);
+  int size = file_length(info->file);
   lock_release(&file_lock);
-  return -1;
+  return size;
 }
 
 static int
 syscall_read(int fd, void *buffer, unsigned size) {
 //  // printf("read(%d, %s, %d)\n", fd, buffer, size);
   // Reads size bytes from the open file fd into buffer
+  lock_acquire(&file_lock);
   if (fd == 0) {
     // Standard input reading
     for (unsigned i = 0; i < size; i++) {
@@ -209,31 +210,30 @@ syscall_read(int fd, void *buffer, unsigned size) {
     }
     return size;
   }
-  lock_acquire(&file_lock);
+
   struct File_info *info = get_file_info(fd);
-  if (info) {
-    return file_read(info->file, buffer, size);
-  }
+  check_null_file(info->file);
+  int read_size = file_read(info->file, buffer, size);
   lock_release(&file_lock);
-  return -1;
+  return read_size;
 }
 
 static int
 syscall_write(int fd, const void *buffer, unsigned size) {
 //  // printf("write(%d, %s, %d)\n", fd, buffer, size);
   // Writes size bytes from buffer to the open file fd
+  lock_acquire(&file_lock);
   if (fd == 1) {
     // Standard output writing
     putbuf(buffer, size);//TODO it could be a big buffer
     return size;
   }
-  lock_acquire(&file_lock);
+
   struct File_info *info = get_file_info(fd);
-  if (info) {
-    return file_write(info->file, buffer, size);
-  }
+  check_null_file(info->file);
+  int write_size = file_write(info->file, buffer, size);
   lock_release(&file_lock);
-  return -1;
+  return write_size;
 }
 
 
