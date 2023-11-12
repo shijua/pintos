@@ -14,8 +14,8 @@ static void syscall_halt(void);
 static void syscall_exit(int);
 static pid_t syscall_exec(const char *);
 static int syscall_wait(pid_t);
-static bool syscall_create(const char *, unsigned);
-static bool syscall_remove(const char *);
+static int syscall_create(const char *, unsigned);
+static int syscall_remove(const char *);
 static int syscall_open(const char *);
 static int syscall_filesize(int);
 static int syscall_read(int, void *, unsigned);
@@ -33,8 +33,6 @@ syscall_init(void) {
 
 static void
 syscall_handler(struct intr_frame *f UNUSED) {
-
-//  lock_init (&syscall_lock);
 
   // retrieve the system call number
   int syscall_num = *(int *) f->esp;
@@ -58,22 +56,22 @@ syscall_handler(struct intr_frame *f UNUSED) {
       syscall_wait (*(pid_t *) (f->esp + 4));
       break;
     case SYS_CREATE:
-      syscall_create(*(char **) (f->esp + 4), *(unsigned *) (f->esp + 8));
+      f->eax = syscall_create(*(char **) (f->esp + 4), *(unsigned *) (f->esp + 8));
       break;
     case SYS_REMOVE:
-      syscall_remove(*(char **) (f->esp + 4));
+      f->eax = syscall_remove(*(char **) (f->esp + 4));
       break;
     case SYS_OPEN:
-      syscall_open(*(char **) (f->esp + 4));
+      f->eax = syscall_open(*(char **) (f->esp + 4));
       break;
     case SYS_FILESIZE:
-      syscall_filesize(*(int *) (f->esp + 4));
+      f->eax = syscall_filesize(*(int *) (f->esp + 4));
       break;
     case SYS_READ:
-      syscall_read(*(int *) (f->esp + 4), *(void **) (f->esp + 8), *(unsigned *) (f->esp + 12));
+      f->eax = syscall_read(*(int *) (f->esp + 4), *(void **) (f->esp + 8), *(unsigned *) (f->esp + 12));
       break;
     case SYS_WRITE:
-      syscall_write(*(int *) (f->esp + 4), *(void **) (f->esp + 8), *(unsigned *) (f->esp + 12));
+      f->eax = syscall_write(*(int *) (f->esp + 4), *(void **) (f->esp + 8), *(unsigned *) (f->esp + 12));
       break;
     case SYS_SEEK:
       syscall_seek(*(int *) (f->esp + 4), *(unsigned *) (f->esp + 8));
@@ -127,20 +125,30 @@ syscall_wait (pid_t pid) {
   return process_wait (pid);
 }
 
+static void
+check_null_file(const char *file) {
+  if (file == NULL) {
+    lock_release(&file_lock); // release the lock
+    syscall_exit(-1);
+  }
+}
+
 // We ignore the synchronization problem for now.
-static bool
+static int
 syscall_create(const char *file, unsigned initial_size) {
 //  // printf("create(%s, %d)\n", file, initial_size);
   lock_acquire(&file_lock);
+  check_null_file(file);
   bool success = filesys_create(file, initial_size);
   lock_release(&file_lock);
   return success;
 }
 
-static bool
+static int
 syscall_remove(const char *file) {
 //  // printf("remove(%s)\n", file);
   lock_acquire(&file_lock);
+  check_null_file(file);
   bool success = filesys_remove(file);
   lock_release(&file_lock);
   return success;
