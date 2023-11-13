@@ -202,7 +202,6 @@ static int
 syscall_read(int fd, void *buffer, unsigned size) {
 //  // printf("read(%d, %s, %d)\n", fd, buffer, size);
   // Reads size bytes from the open file fd into buffer
-  lock_acquire(&file_lock);
   if (fd == 0) {
     // Standard input reading
     for (unsigned i = 0; i < size; i++) {
@@ -210,7 +209,7 @@ syscall_read(int fd, void *buffer, unsigned size) {
     }
     return size;
   }
-
+  lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
   check_null_file(info->file);
   int read_size = file_read(info->file, buffer, size);
@@ -222,13 +221,12 @@ static int
 syscall_write(int fd, const void *buffer, unsigned size) {
 //  // printf("write(%d, %s, %d)\n", fd, buffer, size);
   // Writes size bytes from buffer to the open file fd
-  lock_acquire(&file_lock);
   if (fd == 1) {
     // Standard output writing
     putbuf(buffer, size);//TODO it could be a big buffer
     return size;
   }
-
+  lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
   check_null_file(info->file);
   int write_size = file_write(info->file, buffer, size);
