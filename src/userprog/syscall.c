@@ -26,6 +26,7 @@ static void syscall_seek(int, unsigned);
 static void syscall_tell(int);
 static void syscall_close(int);
 
+/* Three functions used for checking user memory access safety. */
 static void *check_validation(uint32_t *, const void *);
 static void check_validation_str(const void *);
 static void check_validation_rw(const void *, unsigned);
@@ -296,8 +297,15 @@ getpage_ptr(const void *vaddr) {
   }
 }
 
+/* Function used for checking validation for the user virtual address is valid
+   and returns the kernel virtual address from the specific address given. If
+   the address given is invalid, call syscall_exit to terminate the process. */
 static void *check_validation(uint32_t *pd, const void *vaddr) {
   void *kernal_vaddr = pagedir_get_page (pd, vaddr);
+  int pid_child_validation = process_wait (thread_current ()->tid);
+  // if (pid_child_validation == -1) {
+  //   syscall_exit (STATUS_FAIL);
+  // }
   if (vaddr == NULL || !is_user_vaddr (vaddr)) {
     syscall_exit (STATUS_FAIL);
   } else {
@@ -309,10 +317,13 @@ static void *check_validation(uint32_t *pd, const void *vaddr) {
   }
 }
 
+/* Function used for making sure that the string is valid by using for loop. */
 static void check_validation_str(const void * str) {
   for (; *(char *) ((int) getpage_ptr(str)) != 0; str = (char *) str + 1);
 }
 
+/* Function used for making sure that the buffer stored the file is valid by
+   using for loop.  */
 static void check_validation_rw(const void *buffer, unsigned size) {
   unsigned index = 0;
   char *local = (char *) buffer;
