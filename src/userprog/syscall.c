@@ -27,6 +27,8 @@ static void syscall_tell(int);
 static void syscall_close(int);
 
 static void *check_validation(uint32_t *, const void *);
+static void check_validation_str(const void *);
+static void check_validation_rw(const void *, unsigned);
 
 /* set a global lock for file system */
 struct lock file_lock;
@@ -56,6 +58,7 @@ syscall_handler(struct intr_frame *f UNUSED) {
       syscall_exit(*(int *) (f->esp + 4));
       break;
     case SYS_EXEC:
+      check_validation_str (*(void **) (f->esp + 4));
       return_val = syscall_exec (*(char **) (f->esp + 4));
       if (return_val != -1) {
           f->eax = return_val;
@@ -65,21 +68,26 @@ syscall_handler(struct intr_frame *f UNUSED) {
       syscall_wait (*(pid_t *) (f->esp + 4));
       break;
     case SYS_CREATE:
+      check_validation_str (*(void **) (f->esp + 4));
       syscall_create(*(char **) (f->esp + 4), *(unsigned *) (f->esp + 8));
       break;
     case SYS_REMOVE:
+      check_validation_str (*(void **) (f->esp + 4));
       syscall_remove(*(char **) (f->esp + 4));
       break;
     case SYS_OPEN:
+      check_validation_str (*(void **) (f->esp + 4));
       syscall_open(*(char **) (f->esp + 4));
       break;
     case SYS_FILESIZE:
       syscall_filesize(*(int *) (f->esp + 4));
       break;
     case SYS_READ:
+      check_validation_rw (*(void **) (f->esp + 8), *(void **) (f->esp + 12));
       syscall_read(*(int *) (f->esp + 4), *(void **) (f->esp + 8), *(unsigned *) (f->esp + 12));
       break;
     case SYS_WRITE:
+      check_validation_rw (*(void **) (f->esp + 8), *(void **) (f->esp + 12));
       syscall_write(*(int *) (f->esp + 4), *(void **) (f->esp + 8), *(unsigned *) (f->esp + 12));
       break;
     case SYS_SEEK:
@@ -92,6 +100,7 @@ syscall_handler(struct intr_frame *f UNUSED) {
       syscall_close(*(int *) (f->esp + 4));
       break;
     default:
+      syscall_exit (STATUS_FAIL);
       break;
   }
 }
@@ -271,15 +280,41 @@ syscall_close(int fd) {
   lock_release(&file_lock);
 }
 
+void *
+getpage_ptr(const void *vaddr) {
+  void *ptr = pagedir_get_page (thread_current()->pagedir, vaddr);
+  if (ptr == NULL) {
+    syscall_exit (STATUS_FAIL);
+  } else {
+    return ptr;
+  }
+}
+
 static void *check_validation(uint32_t *pd, const void *vaddr) {
   void *kernal_vaddr = pagedir_get_page (pd, vaddr);
   if (vaddr == NULL || !is_user_vaddr (vaddr)) {
-    thread_exit ();
+    syscall_exit (STATUS_FAIL);
   } else {
     if (kernal_vaddr == NULL) {
-      thread_exit ();
+      syscall_exit (STATUS_FAIL);
     } else {
       return kernal_vaddr;
     }
+  }
+}
+
+static void check_validation_str(const void * str) {
+  for (; *(char *) ((int) getpage_ptr(str)) != 0; str = (char *) str + 1);
+}
+
+static void check_validation_rw(const void *buffer, unsigned size) {
+  unsigned index = 0;
+  char *local = (char *) buffer;
+  for (; index < size; index++) {
+    if ((const void *) local < USER_BOTTOM 
+        || !is_user_vaddr ((const void *) local)) {
+          syscall_exit (STATUS_FAIL);
+        }
+        local++;
   }
 }
