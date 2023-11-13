@@ -63,7 +63,7 @@ syscall_handler(struct intr_frame *f UNUSED) {
       }
       break;
     case SYS_WAIT:
-      syscall_wait (*(pid_t *) (f->esp + 4));
+      f->eax = syscall_wait (*(pid_t *) (f->esp + 4));
       break;
     case SYS_CREATE:
       check_validation_str (*(void **) (f->esp + 4));
@@ -118,10 +118,11 @@ syscall_exit (int status) {
   printf ("%s: exit(%d)\n", cur->name, status);
   // struct thread *cur = thread_current ();
   lock_acquire (&child_lock);
-  cur->wait++;
   if(cur -> wait_sema != NULL){
-    sema_up(cur->wait_sema);
     *(cur->exit_code) = status;
+    
+    // printf("changed%d\n", cur->exit_code);
+    sema_up(cur->wait_sema);
   }
   lock_release (&child_lock);
   thread_exit ();
@@ -306,7 +307,7 @@ getpage_ptr(const void *vaddr) {
    the address given is invalid, call syscall_exit to terminate the process. */
 static void *check_validation(uint32_t *pd, const void *vaddr) {
   void *kernal_vaddr = pagedir_get_page (pd, vaddr);
-  int pid_child_validation = process_wait (thread_current ()->tid);
+  // int pid_child_validation = process_wait (thread_current ()->tid);
   // if (pid_child_validation == -1) {
   //   syscall_exit (STATUS_FAIL);
   // }

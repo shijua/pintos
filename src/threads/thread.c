@@ -192,13 +192,13 @@ thread_create (const char *name, int priority,
 
   /* Initialize thread. */
   struct wait_thread_elem *wait_elem = malloc (sizeof(struct wait_thread_elem));
+  init_thread (t, name, priority);
   t->exit_code = &wait_elem->exit_code;
   t->wait_sema = &wait_elem->wait_sema;
   sema_init (t->wait_sema, 0);
+  tid = t->tid = allocate_tid ();
   wait_elem->tid = t -> tid;
   list_push_back (&thread_current ()->child_list, &wait_elem->elem);
-  init_thread (t, name, priority);
-  tid = t->tid = allocate_tid ();
 
   /* initialize file list */
   list_init (&t->file_list);

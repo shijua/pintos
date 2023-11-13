@@ -183,8 +183,7 @@ process_wait (tid_t child_tid UNUSED)
   // printf("\n");
   // lock_release (&child_lock);
   
-  while(true){
-    struct list_elem *e;
+  struct list_elem *e;
   struct wait_thread_elem *child;
   lock_acquire (&child_lock);
   for(e = list_begin(&parent->child_list); e != list_end(&parent->child_list); e = list_next (e)) {
@@ -205,7 +204,6 @@ process_wait (tid_t child_tid UNUSED)
 
   sema_down(&child->wait_sema);
   return (child->exit_code);
-  }
 }
 
 /* Free the current process's resources. */
