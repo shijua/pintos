@@ -189,6 +189,11 @@ process_wait (tid_t child_tid UNUSED)
   for(e = list_begin(&parent->child_list); e != list_end(&parent->child_list); e = list_next (e)) {
     child = list_entry(e, struct wait_thread_elem, elem);
     if(child->tid == child_tid){
+      if(child->wait == true){
+        lock_release(&child_lock);
+        return -1;
+      }
+      child->wait = true;
       break;
     }
   }

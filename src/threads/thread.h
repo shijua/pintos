@@ -117,6 +117,7 @@ struct thread
 
 struct wait_thread_elem{
    tid_t tid;
+   bool wait;
    int exit_code;
    struct semaphore wait_sema;         /* origin 0 will be up when exit*/
    struct list_elem elem;

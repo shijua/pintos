@@ -195,6 +195,7 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   t->exit_code = &wait_elem->exit_code;
   t->wait_sema = &wait_elem->wait_sema;
+  wait_elem->wait = false;
   sema_init (t->wait_sema, 0);
   tid = t->tid = allocate_tid ();
   wait_elem->tid = t -> tid;
