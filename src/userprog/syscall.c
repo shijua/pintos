@@ -11,7 +11,6 @@
 
 static void syscall_handler(struct intr_frame *);
 static void syscall_halt(void);
-static void syscall_exit(int);
 static pid_t syscall_exec(const char *);
 static int syscall_wait(pid_t);
 static bool syscall_create(const char *, unsigned);
@@ -97,13 +96,18 @@ syscall_halt(void) {
 
 /* Terminates the current user program, sending its 
    exit status to the kernal. */
-static void 
+void 
 syscall_exit (int status) {
   // no need to uncomment this printf
-  printf ("%s: exit(%d)\n", thread_current ()->name, status);
+  struct thread* cur = thread_current ();
+  printf ("%s: exit(%d)\n", cur->name, status);
   // struct thread *cur = thread_current ();
   lock_acquire (&child_lock);
-  list_remove (&thread_current ()->child_elem);
+  cur->wait++;
+  if(cur -> wait_sema != NULL){
+    sema_up(cur->wait_sema);
+    *(cur->exit_code) = status;
+  }
   lock_release (&child_lock);
   thread_exit ();
   NOT_REACHED ();

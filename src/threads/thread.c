@@ -92,6 +92,7 @@ thread_init (void)
 
   lock_init (&tid_lock);
   lock_init (&child_lock);
+  sema_init (&execute_sema, 0);
   list_init (&ready_list);
   list_init (&all_list);
 
@@ -190,8 +191,13 @@ thread_create (const char *name, int priority,
     return TID_ERROR;
 
   /* Initialize thread. */
+  struct wait_thread_elem *wait_elem = malloc (sizeof(struct wait_thread_elem));
+  t->exit_code = &wait_elem->exit_code;
+  t->wait_sema = &wait_elem->wait_sema;
+  sema_init (t->wait_sema, 0);
+  wait_elem->tid = t -> tid;
+  list_push_back (&thread_current ()->child_list, &wait_elem->elem);
   init_thread (t, name, priority);
-  list_push_back (&thread_current ()->child_list, &t->child_elem);
   tid = t->tid = allocate_tid ();
 
   /* initialize file list */
@@ -487,7 +493,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   /* for task 2*/
-  t->wait = false;
+  t->wait = 0;
   list_init (&t->child_list);
 
   old_level = intr_disable ();
@@ -603,6 +609,21 @@ allocate_tid (void)
   lock_release (&tid_lock);
 
   return tid;
+}
+
+bool
+check_tid(tid_t tid){
+  struct list_elem *e;
+
+  for (e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, allelem);
+      if(t -> tid == tid){
+        return true;
+      }
+    }
+    return false;
 }
 
 /* Offset of `stack' member within `struct thread'.

@@ -50,15 +50,21 @@ process_execute (const char *file_name)
   char *token;
   char *cpointer = fn_copy;
   token = strtok_r(cpointer, " ", &cpointer);
-  
+  int paraSize = 0;
   while(token != NULL){
     if(strlen(token) > 0) {
       // use malloc, otherwise the variable get in the loop will be the same.
       struct parameterValue *para = malloc(sizeof(struct parameterValue));
       para -> data = token;
+      paraSize += strlen(para -> data) + 5; // 4 is the argv pointer
       list_push_front(parameterList, &para->elem);
     }
     token = strtok_r(cpointer, " ", &cpointer);
+  }
+  paraSize += 16;
+  if(paraSize > PGSIZE) {
+    palloc_free_page (fn_copy);
+    return TID_ERROR;
   }
   // struct list_elem *e;
   // for(e = list_begin(parameterList); e != list_end(parameterList); e = list_next (e)){
@@ -68,10 +74,12 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (fileName, PRI_DEFAULT, start_process, parameterList);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy);
-  
-  return tid;
+  sema_down(&execute_sema);
+  if (tid == TID_ERROR) palloc_free_page (fn_copy);
+  if (check_tid(tid)){
+    return tid;
+  }
+  return TID_ERROR;
 }
 
 /* A thread function that loads a user process and starts it
@@ -93,7 +101,7 @@ start_process (void *parameterList)
   /* If load failed, quit. */
   // palloc_free_page (file_name);
   if (!success) 
-    thread_exit ();
+    syscall_exit (-1);
 
 
   int * _esp = (int *)&if_.esp;
@@ -144,6 +152,7 @@ start_process (void *parameterList)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+  sema_up(&execute_sema);
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -175,30 +184,28 @@ process_wait (tid_t child_tid UNUSED)
   // lock_release (&child_lock);
   
   while(true){
-    
     struct list_elem *e;
-    struct thread *child;
-    lock_acquire (&child_lock);
-    for(e = list_begin(&parent->child_list); e != list_end(&parent->child_list); e = list_next (e)) {
-      child = list_entry(e, struct thread, child_elem);
-      if(child->tid == child_tid){
-        break;
-      }
+  struct wait_thread_elem *child;
+  lock_acquire (&child_lock);
+  for(e = list_begin(&parent->child_list); e != list_end(&parent->child_list); e = list_next (e)) {
+    child = list_entry(e, struct wait_thread_elem, elem);
+    if(child->tid == child_tid){
+      break;
     }
-    lock_release (&child_lock);
-    // if child name not found then TID is invalid or TID is terminated
-    if(e == list_end(&parent->child_list)){
-      parent->wait = true;
-      return -1;
-    }
-    // if child has already called wait
-    if (child != NULL && child->wait == true){
-      parent->wait = true;
-      return -1;
-    }
-    
   }
-  return -1;
+  lock_release (&child_lock);
+  // if child name not found then TID is invalid or TID is terminated
+  if(e == list_end(&parent->child_list)){
+    return -1;
+  }
+  // if child has already called wait
+  // if (child->wait >= 1){
+  //   return -1;
+  // }
+
+  sema_down(&child->wait_sema);
+  return (child->exit_code);
+  }
 }
 
 /* Free the current process's resources. */

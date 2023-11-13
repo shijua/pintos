@@ -26,6 +26,7 @@ typedef int tid_t;
 #define PRI_MAX 63                      /* Highest priority. */
 
 struct lock child_lock;
+struct semaphore execute_sema;
 
 /* A kernel thread or user process.
 
@@ -108,11 +109,18 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
 
-    struct list_elem child_elem;        /* List element for child list. */
     struct list child_list;             /* List of child threads. */
-    bool wait;                  /* True if parent is waiting for child. */
-    
+    int wait;
+    int *exit_code;                     /* the pointer to exit code*/
+    struct semaphore *wait_sema;        /* origin 0 will be up when exit*/
   };
+
+struct wait_thread_elem{
+   tid_t tid;
+   int exit_code;
+   struct semaphore wait_sema;         /* origin 0 will be up when exit*/
+   struct list_elem elem;
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -150,5 +158,7 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+bool check_tid(tid_t);
 
 #endif /* threads/thread.h */

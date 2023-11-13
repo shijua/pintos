@@ -2,6 +2,7 @@
 #define USERPROG_PROCESS_H
 
 #include "threads/thread.h"
+#include "syscall.h"
 
 #define getParameter(LIST_ELEM) list_entry(LIST_ELEM, struct parameterValue,elem)
 
