@@ -100,8 +100,10 @@ start_process (void *parameterList)
 
   /* If load failed, quit. */
   // palloc_free_page (file_name);
-  if (!success) 
+  if (!success) {
+    sema_up(&execute_sema);
     syscall_exit (-1);
+  }
 
 
   int * _esp = (int *)&if_.esp;

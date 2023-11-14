@@ -324,21 +324,22 @@ static void *check_validation(uint32_t *pd, const void *vaddr) {
 
 /* Function used for making sure that the string is valid by using for loop. */
 static void check_validation_str(const void * str) {
+  if (str == NULL) {
+    syscall_exit (STATUS_FAIL);
+  }
   for (; *(char *) ((int) getpage_ptr(str)) != 0; str = (char *) str + 1);
 }
 
 /* Function used for making sure that the buffer stored the file is valid by
    using for loop.  */
 static void check_validation_rw(const void *buffer, unsigned size) {
-  if (strlen (buffer) > size) {
-    syscall_exit (STATUS_FAIL);
-  }
+  unsigned index = 0;
   char *local = (char *) buffer;
-  int bound = local + size;
-  for (; local < bound; local++) {
+  for (; index < size; index++) {
     if ((const void *) local < USER_BOTTOM
         || !is_user_vaddr ((const void *) local)) {
           syscall_exit (STATUS_FAIL);
         }
+        local++;
   }
 }
