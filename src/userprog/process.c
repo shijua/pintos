@@ -105,6 +105,13 @@ start_process (void *parameterList)
     syscall_exit (-1);
   }
 
+  struct file *executableFile = filesys_open(file_name);
+  if(executableFile == NULL) {
+    sema_up(&execute_sema);
+    syscall_exit (-1);
+  }
+  thread_current()->executableFile = executableFile;
+  file_deny_write(executableFile);
 
   int * _esp = (int *)&if_.esp;
   struct list_elem *e;
@@ -219,7 +226,10 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-  
+  if(cur -> executableFile != NULL){
+    file_allow_write(cur -> executableFile);
+  }
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -345,10 +355,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Open executable file. */
   file = filesys_open (file_name);
-  if (file == NULL) 
+  if (file == NULL)
     {
       printf ("load: %s: open failed\n", file_name);
-      goto done; 
+      goto done;
     }
 
   /* Read and verify executable header. */

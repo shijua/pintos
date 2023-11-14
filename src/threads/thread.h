@@ -110,7 +110,8 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
 
     struct list child_list;             /* List of child threads. */
-    int wait;
+    bool *wait;
+    struct file *executableFile;        /* represent the executable*/
     int *exit_code;                     /* the pointer to exit code*/
     struct semaphore *wait_sema;        /* origin 0 will be up when exit*/
   };
