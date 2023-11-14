@@ -330,13 +330,15 @@ static void check_validation_str(const void * str) {
 /* Function used for making sure that the buffer stored the file is valid by
    using for loop.  */
 static void check_validation_rw(const void *buffer, unsigned size) {
-  unsigned index = 0;
+  if (strlen (buffer) > size) {
+    syscall_exit (STATUS_FAIL);
+  }
   char *local = (char *) buffer;
-  for (; index < size; index++) {
+  int bound = local + size;
+  for (; local < bound; local++) {
     if ((const void *) local < USER_BOTTOM
         || !is_user_vaddr ((const void *) local)) {
           syscall_exit (STATUS_FAIL);
         }
-        local++;
   }
 }
