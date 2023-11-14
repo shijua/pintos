@@ -60,9 +60,7 @@ syscall_handler(struct intr_frame *f UNUSED) {
       check_validation (cur_pd, f->esp+4);
       check_validation_str (*(void **) (f->esp + 4));
       return_val = syscall_exec (*(char **) (f->esp + 4));
-      if (return_val != -1) {
-          f->eax = return_val;
-      }
+      f->eax = return_val;
       break;
     case SYS_WAIT:
       check_validation (cur_pd, f->esp+4);
@@ -147,11 +145,7 @@ syscall_exit (int status) {
 static pid_t
 syscall_exec (const char *cmd_line) {
   // printf ("exec(%s)\n", cmd_line);
-  enum intr_level old_level = intr_disable ();
-  lock_acquire (&child_lock);
   pid_t pid = process_execute (cmd_line);
-  lock_release (&child_lock);
-  intr_set_level (old_level);
   return pid;
 }
 
