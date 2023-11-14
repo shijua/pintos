@@ -53,9 +53,11 @@ syscall_handler(struct intr_frame *f UNUSED) {
       syscall_halt();
       break;
     case SYS_EXIT:
+      check_validation (cur_pd, f->esp+4);
       syscall_exit(*(int *) (f->esp + 4));
       break;
     case SYS_EXEC:
+      check_validation (cur_pd, f->esp+4);
       check_validation_str (*(void **) (f->esp + 4));
       return_val = syscall_exec (*(char **) (f->esp + 4));
       if (return_val != -1) {
@@ -63,38 +65,50 @@ syscall_handler(struct intr_frame *f UNUSED) {
       }
       break;
     case SYS_WAIT:
+      check_validation (cur_pd, f->esp+4);
       f->eax = syscall_wait (*(pid_t *) (f->esp + 4));
       break;
     case SYS_CREATE:
+      check_validation (cur_pd, f->esp+4);
+      check_validation (cur_pd, f->esp+8);
       check_validation_str (*(void **) (f->esp + 4));
       f->eax = syscall_create(*(char **) (f->esp + 4), *(unsigned *) (f->esp + 8));
       break;
     case SYS_REMOVE:
+      check_validation (cur_pd, f->esp+4);
       check_validation_str (*(void **) (f->esp + 4));
       f->eax = syscall_remove(*(char **) (f->esp + 4));
       break;
     case SYS_OPEN:
+      check_validation (cur_pd, f->esp+4);
       check_validation_str (*(void **) (f->esp + 4));
       f->eax = syscall_open(*(char **) (f->esp + 4));
       break;
     case SYS_FILESIZE:
+      check_validation (cur_pd, f->esp+4);
       f->eax = syscall_filesize(*(int *) (f->esp + 4));
       break;
     case SYS_READ:
+      check_validation (cur_pd, f->esp+4);
       check_validation_rw (*(void **) (f->esp + 8), *(void **) (f->esp + 12));
       f->eax = syscall_read(*(int *) (f->esp + 4), *(void **) (f->esp + 8), *(unsigned *) (f->esp + 12));
       break;
     case SYS_WRITE:
+      check_validation (cur_pd, f->esp+4);
       check_validation_rw (*(void **) (f->esp + 8), *(void **) (f->esp + 12));
       f->eax = syscall_write(*(int *) (f->esp + 4), *(void **) (f->esp + 8), *(unsigned *) (f->esp + 12));
       break;
     case SYS_SEEK:
+      check_validation (cur_pd, f->esp+4);
+      check_validation (cur_pd, f->esp+8);
       syscall_seek(*(int *) (f->esp + 4), *(unsigned *) (f->esp + 8));
       break;
     case SYS_TELL:
+      check_validation (cur_pd, f->esp+4);
       syscall_tell(*(int *) (f->esp + 4));
       break;
     case SYS_CLOSE:
+      check_validation (cur_pd, f->esp+4);
       syscall_close(*(int *) (f->esp + 4));
       break;
     default:
@@ -306,7 +320,6 @@ getpage_ptr(const void *vaddr) {
    and returns the kernel virtual address from the specific address given. If
    the address given is invalid, call syscall_exit to terminate the process. */
 static void *check_validation(uint32_t *pd, const void *vaddr) {
-  void *kernal_vaddr = pagedir_get_page (pd, vaddr);
   // int pid_child_validation = process_wait (thread_current ()->tid);
   // if (pid_child_validation == -1) {
   //   syscall_exit (STATUS_FAIL);
@@ -314,6 +327,7 @@ static void *check_validation(uint32_t *pd, const void *vaddr) {
   if (vaddr == NULL || !is_user_vaddr (vaddr)) {
     syscall_exit (STATUS_FAIL);
   } else {
+    void *kernal_vaddr = pagedir_get_page (pd, vaddr);
     if (kernal_vaddr == NULL) {
       syscall_exit (STATUS_FAIL);
     } else {
