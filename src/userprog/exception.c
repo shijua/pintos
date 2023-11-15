@@ -7,13 +7,14 @@
 #include "userprog/syscall.h"
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
+
+// function used to check if pointer mapped to a unmapped memory
 static bool 
 is_valid_ptr(const void *user_ptr)
 {
-  struct thread *curr = thread_current();
-  if(user_ptr != NULL && is_user_vaddr (user_ptr))
-  {
-    return (pagedir_get_page(curr->pagedir, user_ptr)) != NULL;
+  struct thread *curr = thread_current ();
+  if(user_ptr != NULL && is_user_vaddr (user_ptr)) {
+    return pagedir_get_page (curr->pagedir, user_ptr) != NULL;
   }
   return false;
 }
@@ -157,9 +158,10 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
+
   /* check if the memory is unmapped */
-  if(!is_valid_ptr(fault_addr)) {
-      syscall_exit(-1);
+  if(!is_valid_ptr (fault_addr)) {
+      syscall_exit (-1);
   }
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to

@@ -5,7 +5,8 @@
 #include "syscall.h"
 
 /* shortcur to express list_entry*/
-#define getParameter(LIST_ELEM) list_entry (LIST_ELEM, struct parameterValue, elem)
+#define getParameter(LIST_ELEM) list_entry \
+    (LIST_ELEM, struct parameterValue, elem)
 
 /* Coefficient for stack overflow. */
 #define PTR_SIZE 4

@@ -31,22 +31,21 @@ static void syscall_close (int);
 static void check_null_file (struct file *file);
 static struct File_info *get_file_info (int fd);
 
-void *getpage_ptr(const void *vaddr);
 /* Three functions used for checking user memory access safety. */
 static void *check_validation (const void *);
-static void check_validation_str (const void *);
 static void check_validation_rw (const void *, unsigned);
+static void check_validation_str (const char **vaddr);
 
 /* init the syscall */
 void
 syscall_init (void) {
-  intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
+  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
 /* direct to related system call according to system call number */
 static void
 syscall_handler (struct intr_frame *f UNUSED) {
-  // retrieve the system call number
+  /* retrieve the system call number */
   int syscall_num = *((int *) check_validation (f->esp));
 
   switch (syscall_num) {
@@ -55,11 +54,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
       break;
     case SYS_EXIT:
       check_validation (ARG_0);
-      syscall_exit(*(int *) (ARG_0));
+      syscall_exit (*(int *) (ARG_0));
       break;
     case SYS_EXEC:
-      check_validation (ARG_0);
-      check_validation_str (*(void **) (ARG_0));
+      check_validation_str (ARG_0);
       f->eax = syscall_exec (*(char **) (ARG_0));
       break;
     case SYS_WAIT:
@@ -67,19 +65,16 @@ syscall_handler (struct intr_frame *f UNUSED) {
       f->eax = syscall_wait (*(pid_t *) (ARG_0));
       break;
     case SYS_CREATE:
-      check_validation (ARG_0);
+      check_validation_str (ARG_0);
       check_validation (ARG_1);
-      check_validation_str (*(void **) (ARG_0));
-      f->eax = syscall_create(*(char **) (ARG_0), *(unsigned *) (ARG_1));
+      f->eax = syscall_create (*(char **) (ARG_0), *(unsigned *) (ARG_1));
       break;
     case SYS_REMOVE:
-      check_validation (ARG_0);
-      check_validation_str (*(void **) (ARG_0));
-      f->eax = syscall_remove(*(char **) (ARG_0));
+      check_validation_str (ARG_0);
+      f->eax = syscall_remove (*(char **) (ARG_0));
       break;
     case SYS_OPEN:
-      check_validation (ARG_0);
-      check_validation_str (*(void **) (ARG_0));
+      check_validation_str (ARG_0);
       f->eax = syscall_open (*(char **) (ARG_0));
       break;
     case SYS_FILESIZE:
@@ -120,7 +115,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 /* Terminates Pintos (this should be seldom used). */
 static void
 syscall_halt (void) {
-  shutdown_power_off();
+  shutdown_power_off ();
 }
 
 /* Terminates the current user program, sending its 
@@ -188,7 +183,7 @@ syscall_open (const char *file) {
 static int
 syscall_filesize (int fd) {
   lock_acquire (&file_lock);
-  struct File_info *info = get_file_info( fd);
+  struct File_info *info = get_file_info (fd);
   check_null_file (info->file);
   int size = file_length (info->file);
   lock_release (&file_lock);
@@ -198,9 +193,9 @@ syscall_filesize (int fd) {
 /* Reads size bytes from the ﬁle open as fd into buﬀer. */
 static int
 syscall_read (int fd, void *buffer, unsigned size) {
-  // Reads size bytes from the open file fd into buffer
+  /* Reads size bytes from the open file fd into buffer */
   if (fd == 0) {
-    // Standard input reading
+    /* Standard input reading */
     for (unsigned i = 0; i < size; i++) {
       ((char *) buffer)[i] = input_getc (); // It is a char!
     }
@@ -217,9 +212,9 @@ syscall_read (int fd, void *buffer, unsigned size) {
 /* Writes size bytes from buﬀer to the open ﬁle fd. */
 static int
 syscall_write (int fd, void *buffer, unsigned size) {
-  // Writes size bytes from buffer to the open file fd
+  /* Writes size bytes from buffer to the open file fd */
   if (fd == 1) {
-    // Standard output writing
+    /* Standard output writing */
     putbuf (buffer, size);
     return size;
   }
@@ -232,7 +227,7 @@ syscall_write (int fd, void *buffer, unsigned size) {
 }
 
 /* Changes the next byte to be read or written in open ﬁle fd to position, 
-   expressed in bytes from the beginning of the ﬁle.*/
+   expressed in bytes from the beginning of the ﬁle. */
 static void
 syscall_seek (int fd, unsigned position) {
   lock_acquire (&file_lock);
@@ -273,7 +268,8 @@ syscall_close (int fd) {
 static void
 check_null_file (struct file *file) {
   if (file == NULL) {
-    lock_release (&file_lock); // release the lock
+    /* release the lock as it is acquired */
+    lock_release (&file_lock);
     syscall_exit (-1);
   }
 }
@@ -285,32 +281,19 @@ get_file_info (int fd) {
   for (e = list_begin (&thread_current ()->file_list);
        e != list_end (&thread_current ()->file_list);
        e = list_next (e)) {
-    struct File_info *info = list_entry(e,
-    struct File_info, elem);
+    struct File_info *info = list_entry (e, struct File_info, elem);
     if (info->fd == fd) {
       return info;
     }
   }
-  // If no file_info is found, return NULL
+  /* If no file_info is found, return NULL */
   return NULL; 
-}
-
-void *
-getpage_ptr(const void *vaddr) {
-  void *ptr = pagedir_get_page (thread_current ()->pagedir, vaddr);
-  if (ptr == NULL) {
-    syscall_exit (STATUS_FAIL);
-  } else {
-    return ptr;
-  }
-  NOT_REACHED ();
-  return NULL;
 }
 
 /* Function used for checking validation for the user virtual address is valid
    and returns the kernel virtual address from the specific address given. If
    the address given is invalid, call syscall_exit to terminate the process. */
-static void *check_validation(const void *vaddr) {
+static void *check_validation (const void *vaddr) {
   uint32_t *pd = thread_current ()->pagedir;
   if (vaddr == NULL || !is_user_vaddr (vaddr)) {
     syscall_exit (STATUS_FAIL);
@@ -326,18 +309,18 @@ static void *check_validation(const void *vaddr) {
   return NULL;
 }
 
-/* Function used for making sure that the string is valid by using for loop. */
-static void check_validation_str (const void * str) {
-  if (str == NULL) {
+/* special case for string that need to check whether content is null */
+static void check_validation_str (const char **vaddr) {
+  if (*vaddr == NULL) {
     syscall_exit (STATUS_FAIL);
   }
-  for (; *(char *) ((int) getpage_ptr (str)) != 0; str = (char *) str + 1);
+  check_validation (vaddr);
 }
 
 /* Function used for making sure that the buffer stored the file is valid by
    using for loop.  */
 static void check_validation_rw (const void *buffer, unsigned size) {
-  // address of the start of buffer
+  /* address of the start of buffer */
   uint32_t local = (uint32_t) buffer;
   unsigned buffer_length = local + size;
   for (; local < buffer_length; local++) {

@@ -52,11 +52,11 @@ process_execute (const char *file_name)
   int paraSize = 0;
   while (token != NULL) {
     if (strlen(token) > 0) {
-      // use malloc, otherwise the variable get in the loop will be the same.
+      /* use malloc, otherwise the variable get in the loop will be the same. */
       struct parameterValue *para = malloc (sizeof (struct parameterValue));
       para -> data = token;
-      paraSize += strlen(para -> data) + PTR_SIZE + STRING_BLANK;
-      list_push_front(parameterList, &para->elem);
+      paraSize += strlen (para -> data) + PTR_SIZE + STRING_BLANK;
+      list_push_front (parameterList, &para->elem);
     }
     token = strtok_r(cpointer, " ", &cpointer);
   }
@@ -96,10 +96,9 @@ start_process (void *parameterList)
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  // palloc_free_page (file_name);
   if (!success) {
     exists = false;
-    sema_up(&execute_sema);
+    sema_up (&execute_sema);
     syscall_exit (-1);
     NOT_REACHED ();
   }
@@ -115,25 +114,25 @@ start_process (void *parameterList)
   int index = 0;
   char *para;
   int size = 0;
-  // argv
-  for (e = list_begin(parameterList); e != list_end(parameterList);
+  /* argv */
+  for (e = list_begin (parameterList); e != list_end (parameterList);
        e = list_next (e)) {
     para = getParameter(e) -> data;
-    *_esp -= strlen(para) + 1;
-    index += strlen(para) + 1;
-    strlcpy((char *)if_.esp, para, strlen(para) + 1);
+    *_esp -= strlen (para) + 1;
+    index += strlen (para) + 1;
+    strlcpy((char *)if_.esp, para, strlen (para) + 1);
     getParameter(e) ->address = (unsigned)if_.esp;
     size++;
   }
-  // word align
+  /* word align */
   int mod = index % 4 == 0 ? 0 : 4 - (index % 4);
   *_esp -= mod;
   memset((char *)if_.esp, 0, mod);
-  // argv[argc]
+  /* argv[argc] */
   index += mod;
   *_esp -= 4;
   memset((char *)if_.esp, 0, 4);
-  // argv[0] - argv[argc - 1]
+  /* argv[0] - argv[argc - 1] */
   index += mod;
   int add;
   for (e = list_begin (parameterList); e != list_end (parameterList);
@@ -143,17 +142,16 @@ start_process (void *parameterList)
     index += 4;
     memcpy ((char *)if_.esp, &(add), 4);
   }
-  // argv
+  /* argv */
   *_esp -= 4;
   int argv = (int)if_.esp + 4;
   memcpy ((char *)if_.esp, &argv, 4);
-  // argc
+  /* argc */
   *_esp -= 4;
   memcpy ((char *)if_.esp, &size, 4);
-  // return address
+  /* return address */
   *_esp -= 4;
   memset ((char *)if_.esp, 0, 4);
-  // hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, 1);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -180,14 +178,15 @@ process_wait (tid_t child_tid UNUSED)
   
   struct list_elem *e;
   struct wait_thread_elem *child;
-  // iterate through child list
+  /* iterate through child list */
   lock_acquire (&child_lock);
   for (e = list_begin (&parent->child_list); 
        e != list_end (&parent->child_list); e = list_next (e)) {
     child = list_entry(e, struct wait_thread_elem, elem);
     if(child->tid == child_tid) {
-      // if already been waited then terminate as it can only be waited once
-      if(child->wait == true) {
+      /* if already been waited then terminate as it can only be waited once */
+      if (child->wait == true) {
+        lock_release(&child_lock);
         return -1;
       }
       child->wait = true;
@@ -195,11 +194,11 @@ process_wait (tid_t child_tid UNUSED)
     }
   }
   lock_release (&child_lock);
-  // if child name not found then TID is invalid
+  /* if child name not found then TID is invalid */
   if (e == list_end (&parent->child_list)) {
     return -1;
   }
-  // wait until child terminates
+  /* wait until child terminates */
   sema_down (&child->wait_sema);
   return (child->exit_code);
 }
@@ -210,7 +209,7 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-  // allow write to executable file after process terminates
+  /* allow write to executable file after process terminates */
   if(cur -> executableFile != NULL) {
     file_allow_write (cur -> executableFile);
   }
