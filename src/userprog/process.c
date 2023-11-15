@@ -55,12 +55,12 @@ process_execute (const char *file_name)
       // use malloc, otherwise the variable get in the loop will be the same.
       struct parameterValue *para = malloc (sizeof (struct parameterValue));
       para -> data = token;
-      paraSize += strlen(para -> data) + 5; // 4 is the argv pointer 1 is blank char
+      paraSize += strlen(para -> data) + PTR_SIZE + STRING_BLANK;
       list_push_front(parameterList, &para->elem);
     }
     token = strtok_r(cpointer, " ", &cpointer);
   }
-  paraSize += 16;
+  paraSize += STACK_BASE;
   if (paraSize > PGSIZE) {
     palloc_free_page (fn_copy);
     return TID_ERROR;
