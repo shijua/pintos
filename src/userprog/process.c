@@ -181,6 +181,7 @@ process_wait (tid_t child_tid UNUSED)
   struct list_elem *e;
   struct wait_thread_elem *child;
   // iterate through child list
+  lock_acquire (&child_lock);
   for (e = list_begin (&parent->child_list); 
        e != list_end (&parent->child_list); e = list_next (e)) {
     child = list_entry(e, struct wait_thread_elem, elem);
@@ -193,6 +194,7 @@ process_wait (tid_t child_tid UNUSED)
       break;
     }
   }
+  lock_release (&child_lock);
   // if child name not found then TID is invalid
   if (e == list_end (&parent->child_list)) {
     return -1;

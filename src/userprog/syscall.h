@@ -4,7 +4,7 @@
 #include "threads/thread.h"
 
 #define STATUS_FAIL -1 /* Status code for syscall */
-#define USER_BOTTOM ((void *) 0x0804800) /* Bottom of user address */
+#define USER_BOTTOM 0x0804800 /* Bottom of user address */
 
 typedef int pid_t;
 #define PID_ERROR ((pid_t) -1)          /* Error value for pid_t. */
