@@ -25,7 +25,12 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+/* set a global lock for file system */
+struct lock file_lock;
+/* lock used for TODO*/
 struct lock child_lock;
+/* lock used for ensure check whether process 
+   is created successfully before return tid */
 struct semaphore execute_sema;
 
 /* A kernel thread or user process.
@@ -110,18 +115,18 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
 
     struct list child_list;             /* List of child threads. */
-    bool *wait;
-    struct file *executableFile;        /* represent the executable*/
-    int *exit_code;                     /* the pointer to exit code*/
-    struct semaphore *wait_sema;        /* origin 0 will be up when exit*/
+    struct file *executableFile;        /* represent the executable */
+    int *exit_code;                     /* the pointer to exit code */
+    struct semaphore *wait_sema;        /* origin 0 will be up when exit */
   };
 
-struct wait_thread_elem{
-   tid_t tid;
-   bool wait;
-   int exit_code;
+/* struct use for indicate the status of child*/
+struct wait_thread_elem {
+   tid_t tid;                          /* tid of child */
+   bool wait;                          /* wait status */
+   int exit_code;                      /* exit code of child*/
    struct semaphore wait_sema;         /* origin 0 will be up when exit*/
-   struct list_elem elem;
+   struct list_elem elem;              /* List element. */
 };
 
 /* If false (default), use round-robin scheduler.

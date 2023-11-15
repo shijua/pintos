@@ -17,8 +17,9 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 
-static bool exists;
+static bool exists; /* use for indicate whether executable file exists */
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -31,49 +32,45 @@ process_execute (const char *file_name)
 {
   exists = true;
   char *fn_copy;
-  // char *fn_copy2;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
-  // fn_copy2 = palloc_get_page(0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  // if (fn_copy2 == NULL)
-  //   return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
-  // strlcpy (fn_copy2, file_name, PGSIZE);
 
   /* Argument Passing. */
-  struct list *parameterList = malloc(sizeof(struct list));
-  list_init(parameterList);
+  /* initialise a parameter list to store parameter */
+  struct list *parameterList = malloc (sizeof (struct list));
+  list_init (parameterList);
   
   char *token;
   char *cpointer = fn_copy;
-  token = strtok_r(cpointer, " ", &cpointer);
+  token = strtok_r (cpointer, " ", &cpointer);
   int paraSize = 0;
-  while(token != NULL){
-    if(strlen(token) > 0) {
+  while (token != NULL) {
+    if (strlen(token) > 0) {
       // use malloc, otherwise the variable get in the loop will be the same.
-      struct parameterValue *para = malloc(sizeof(struct parameterValue));
+      struct parameterValue *para = malloc (sizeof (struct parameterValue));
       para -> data = token;
-      paraSize += strlen(para -> data) + 5; // 4 is the argv pointer
+      paraSize += strlen(para -> data) + 5; // 4 is the argv pointer 1 is blank char
       list_push_front(parameterList, &para->elem);
     }
     token = strtok_r(cpointer, " ", &cpointer);
   }
   paraSize += 16;
-  if(paraSize > PGSIZE) {
+  if (paraSize > PGSIZE) {
     palloc_free_page (fn_copy);
     return TID_ERROR;
   }
-  char *fileName = getParameter(list_back(parameterList)) -> data;
+  char *fileName = getParameter (list_back (parameterList)) -> data;
 
   /* Create a new thread to execute FILE_NAME. */
   lock_acquire (&child_lock);
   tid = thread_create (fileName, PRI_DEFAULT, start_process, parameterList);
-  sema_down(&execute_sema);
+  sema_down (&execute_sema);
   lock_release (&child_lock);
   if (exists == false) {
     palloc_free_page (fn_copy);
@@ -87,7 +84,7 @@ process_execute (const char *file_name)
 static void
 start_process (void *parameterList)
 {
-  char *file_name = getParameter(list_back(parameterList)) -> data;
+  char *file_name = getParameter (list_back (parameterList)) -> data;
   struct intr_frame if_;
   bool success;
 
@@ -107,41 +104,45 @@ start_process (void *parameterList)
     NOT_REACHED ();
   }
 
-  struct file *executableFile = filesys_open(file_name);
-  thread_current()->executableFile = executableFile;
-  file_deny_write(executableFile);
-  sema_up(&execute_sema);
+  /* deny write when execute this file */
+  struct file *executableFile = filesys_open (file_name);
+  thread_current ()->executableFile = executableFile;
+  file_deny_write (executableFile);
+  sema_up (&execute_sema);
+
   int * _esp = (int *)&if_.esp;
   struct list_elem *e;
   int index = 0;
   char *para;
   int size = 0;
   // argv
-  for(e = list_begin(parameterList); e != list_end(parameterList); e = list_next (e)){
+  for (e = list_begin(parameterList); e != list_end(parameterList);
+       e = list_next (e)) {
     para = getParameter(e) -> data;
     *_esp -= strlen(para) + 1;
     index += strlen(para) + 1;
     strlcpy((char *)if_.esp, para, strlen(para) + 1);
     getParameter(e) ->address = (unsigned)if_.esp;
     size++;
-  };
+  }
   // word align
   int mod = index % 4 == 0 ? 0 : 4 - (index % 4);
   *_esp -= mod;
   memset((char *)if_.esp, 0, mod);
-  // argv[4]
+  // argv[argc]
   index += mod;
   *_esp -= 4;
   memset((char *)if_.esp, 0, 4);
-  // argv[3]
+  // argv[0] - argv[argc - 1]
   index += mod;
   int add;
-  for(e = list_begin(parameterList); e != list_end(parameterList); e = list_next (e)){
+  for (e = list_begin (parameterList); e != list_end (parameterList);
+       e = list_next (e)) {
     add = getParameter(e) -> address;
     *_esp -= 4;
     index += 4;
     memcpy ((char *)if_.esp, &(add), 4);
-  };
+  }
   // argv
   *_esp -= 4;
   int argv = (int)if_.esp + 4;
@@ -175,33 +176,29 @@ start_process (void *parameterList)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  struct thread *parent = thread_current();
+  struct thread *parent = thread_current ();
   
   struct list_elem *e;
   struct wait_thread_elem *child;
-  lock_acquire (&child_lock);
-  for(e = list_begin(&parent->child_list); e != list_end(&parent->child_list); e = list_next (e)) {
+  // iterate through child list
+  for (e = list_begin (&parent->child_list); 
+       e != list_end (&parent->child_list); e = list_next (e)) {
     child = list_entry(e, struct wait_thread_elem, elem);
-    if(child->tid == child_tid){
-      if(child->wait == true){
-        lock_release(&child_lock);
+    if(child->tid == child_tid) {
+      // if already been waited then terminate as it can only be waited once
+      if(child->wait == true) {
         return -1;
       }
       child->wait = true;
       break;
     }
   }
-  lock_release (&child_lock);
-  // if child name not found then TID is invalid or TID is terminated
-  if(e == list_end(&parent->child_list)){
+  // if child name not found then TID is invalid
+  if (e == list_end (&parent->child_list)) {
     return -1;
   }
-  // if child has already called wait
-  // if (child->wait >= 1){
-  //   return -1;
-  // }
-
-  sema_down(&child->wait_sema);
+  // wait until child terminates
+  sema_down (&child->wait_sema);
   return (child->exit_code);
 }
 
@@ -211,8 +208,9 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-  if(cur -> executableFile != NULL){
-    file_allow_write(cur -> executableFile);
+  // allow write to executable file after process terminates
+  if(cur -> executableFile != NULL) {
+    file_allow_write (cur -> executableFile);
   }
 
   /* Destroy the current process's page directory and switch back

@@ -6,7 +6,8 @@
 #include "threads/thread.h"
 #include "userprog/syscall.h"
 #include "threads/vaddr.h"
-bool
+#include "userprog/pagedir.h"
+static bool 
 is_valid_ptr(const void *user_ptr)
 {
   struct thread *curr = thread_current();
@@ -16,7 +17,6 @@ is_valid_ptr(const void *user_ptr)
   }
   return false;
 }
-
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;

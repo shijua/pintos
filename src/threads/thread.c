@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -95,6 +96,7 @@ thread_init (void)
   sema_init (&execute_sema, 0);
   list_init (&ready_list);
   list_init (&all_list);
+  lock_init (&file_lock);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -494,7 +496,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   /* for task 2*/
-  t->wait = 0;
   list_init (&t->child_list);
 
   old_level = intr_disable ();
@@ -612,6 +613,7 @@ allocate_tid (void)
   return tid;
 }
 
+/* check if tid exits in thread list, used in process wait */
 bool
 check_tid(tid_t tid){
   struct list_elem *e;

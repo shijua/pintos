@@ -10,39 +10,41 @@
 #include "devices/input.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
+#include "devices/shutdown.h"
+#include "userprog/process.h"
 
-static void syscall_handler(struct intr_frame *);
-static void syscall_halt(void);
-static pid_t syscall_exec(const char *);
-static int syscall_wait(pid_t);
-static int syscall_create(const char *, unsigned);
-static int syscall_remove(const char *);
-static int syscall_open(const char *);
-static int syscall_filesize(int);
-static int syscall_read(int, void *, unsigned);
-static int syscall_write(int, const void *, unsigned);
-static void syscall_seek(int, unsigned);
-static void syscall_tell(int);
-static void syscall_close(int);
+static void syscall_handler (struct intr_frame *);
+static void syscall_halt (void);
+static pid_t syscall_exec (const char *);
+static int syscall_wait (pid_t);
+static int syscall_create (const char *, unsigned);
+static int syscall_remove (const char *);
+static int syscall_open (const char *);
+static int syscall_filesize (int);
+static int syscall_read (int, void *, unsigned);
+static int syscall_write (int, const void *, unsigned);
+static void syscall_seek (int, unsigned);
+static void syscall_tell (int);
+static void syscall_close (int);
 
 /* Three functions used for checking user memory access safety. */
-static void *check_validation(uint32_t *, const void *);
-static void check_validation_str(const void *);
-static void check_validation_rw(const void *, unsigned);
+void *getpage_ptr(const void *vaddr);
+static void *check_validation (uint32_t *, const void *);
+static void check_validation_str (const void *);
+static void check_validation_rw (const void *, unsigned);
 
-/* set a global lock for file system */
-struct lock file_lock;
+
 void
 syscall_init(void) {
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
-  lock_init(&file_lock); // initialize the lock
 }
 
 static void
 syscall_handler(struct intr_frame *f UNUSED) {
 
   // retrieve the system call number
-  uint32_t cur_pd = thread_current ()->pagedir;
+  uint32_t *cur_pd = thread_current ()->pagedir;
   int syscall_num = *((int *) check_validation (cur_pd, f->esp));
 
   // printf ("system call number: %d\n", syscall_num);
@@ -88,12 +90,12 @@ syscall_handler(struct intr_frame *f UNUSED) {
       break;
     case SYS_READ:
       check_validation (cur_pd, f->esp+4);
-      check_validation_rw (*(void **) (f->esp + 8), *(void **) (f->esp + 12));
+      check_validation_rw (*(void **) (f->esp + 8), *(unsigned *) (f->esp + 12));
       f->eax = syscall_read(*(int *) (f->esp + 4), *(void **) (f->esp + 8), *(unsigned *) (f->esp + 12));
       break;
     case SYS_WRITE:
       check_validation (cur_pd, f->esp+4);
-      check_validation_rw (*(void **) (f->esp + 8), *(void **) (f->esp + 12));
+      check_validation_rw (*(void **) (f->esp + 8), *(unsigned *) (f->esp + 12));
       f->eax = syscall_write(*(int *) (f->esp + 4), *(void **) (f->esp + 8), *(unsigned *) (f->esp + 12));
       break;
     case SYS_SEEK:
@@ -130,10 +132,8 @@ syscall_exit (int status) {
   printf ("%s: exit(%d)\n", cur->name, status);
   // struct thread *cur = thread_current ();
   lock_acquire (&child_lock);
-  if(cur -> wait_sema != NULL){
-    *(cur->exit_code) = status;
-    sema_up(cur->wait_sema);
-  }
+  *(cur->exit_code) = status;
+  sema_up(cur->wait_sema);
   lock_release (&child_lock);
   thread_exit ();
   NOT_REACHED ();
@@ -154,7 +154,7 @@ syscall_wait (pid_t pid) {
 }
 
 static void
-check_null_file(const char *file) {
+check_null_file(struct file *file) {
   if (file == NULL) {
     lock_release(&file_lock); // release the lock
     syscall_exit(-1);
@@ -166,7 +166,6 @@ static int
 syscall_create(const char *file, unsigned initial_size) {
 //  // printf("create(%s, %d)\n", file, initial_size);
   lock_acquire(&file_lock);
-  check_null_file(file);
   bool success = filesys_create(file, initial_size);
   lock_release(&file_lock);
   return success;
@@ -176,7 +175,6 @@ static int
 syscall_remove(const char *file) {
 //  // printf("remove(%s)\n", file);
   lock_acquire(&file_lock);
-  check_null_file(file);
   bool success = filesys_remove(file);
   lock_release(&file_lock);
   return success;
@@ -186,7 +184,6 @@ static int
 syscall_open(const char *file) {
 //  // printf ("open(%s)\n", file);
   lock_acquire(&file_lock);
-  check_null_file(file);
   struct file *f = filesys_open(file);
   if (f == NULL) {
     return -1;
@@ -256,7 +253,7 @@ syscall_write(int fd, const void *buffer, unsigned size) {
   }
   lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
-  check_null_file(info->file);
+  check_null_file (info->file);
   int write_size = file_write(info->file, buffer, size);
   lock_release(&file_lock);
   return write_size;
@@ -300,12 +297,14 @@ syscall_close(int fd) {
 
 void *
 getpage_ptr(const void *vaddr) {
-  void *ptr = pagedir_get_page (thread_current()->pagedir, vaddr);
+  void *ptr = pagedir_get_page (thread_current ()->pagedir, vaddr);
   if (ptr == NULL) {
     syscall_exit (STATUS_FAIL);
   } else {
     return ptr;
   }
+  NOT_REACHED ();
+  return NULL;
 }
 
 /* Function used for checking validation for the user virtual address is valid
@@ -326,10 +325,12 @@ static void *check_validation(uint32_t *pd, const void *vaddr) {
       return kernal_vaddr;
     }
   }
+  NOT_REACHED ();
+  return NULL;
 }
 
 /* Function used for making sure that the string is valid by using for loop. */
-static void check_validation_str(const void * str) {
+static void check_validation_str (const void * str) {
   if (str == NULL) {
     syscall_exit (STATUS_FAIL);
   }
@@ -338,7 +339,7 @@ static void check_validation_str(const void * str) {
 
 /* Function used for making sure that the buffer stored the file is valid by
    using for loop.  */
-static void check_validation_rw(const void *buffer, unsigned size) {
+static void check_validation_rw (const void *buffer, unsigned size) {
   unsigned index = 0;
   char *local = (char *) buffer;
   for (; index < size; index++) {
