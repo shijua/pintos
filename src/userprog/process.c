@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+static bool exists;
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -28,6 +29,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
+  exists = true;
   char *fn_copy;
   // char *fn_copy2;
   tid_t tid;
@@ -66,20 +68,18 @@ process_execute (const char *file_name)
     palloc_free_page (fn_copy);
     return TID_ERROR;
   }
-  // struct list_elem *e;
-  // for(e = list_begin(parameterList); e != list_end(parameterList); e = list_next (e)){
-  //   printf("%s\n", getParameter(e) -> data);
-  // };
   char *fileName = getParameter(list_back(parameterList)) -> data;
 
   /* Create a new thread to execute FILE_NAME. */
+  lock_acquire (&child_lock);
   tid = thread_create (fileName, PRI_DEFAULT, start_process, parameterList);
   sema_down(&execute_sema);
-  if (tid == TID_ERROR) palloc_free_page (fn_copy);
-  if (check_tid(tid)){
-    return tid;
+  lock_release (&child_lock);
+  if (exists == false) {
+    palloc_free_page (fn_copy);
+    return TID_ERROR;
   }
-  return TID_ERROR;
+  return tid;
 }
 
 /* A thread function that loads a user process and starts it
@@ -101,18 +101,16 @@ start_process (void *parameterList)
   /* If load failed, quit. */
   // palloc_free_page (file_name);
   if (!success) {
+    exists = false;
     sema_up(&execute_sema);
     syscall_exit (-1);
+    NOT_REACHED ();
   }
 
   struct file *executableFile = filesys_open(file_name);
-  if(executableFile == NULL) {
-    sema_up(&execute_sema);
-    syscall_exit (-1);
-  }
   thread_current()->executableFile = executableFile;
   file_deny_write(executableFile);
-
+  sema_up(&execute_sema);
   int * _esp = (int *)&if_.esp;
   struct list_elem *e;
   int index = 0;
@@ -161,7 +159,6 @@ start_process (void *parameterList)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
-  sema_up(&execute_sema);
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -179,18 +176,6 @@ int
 process_wait (tid_t child_tid UNUSED) 
 {
   struct thread *parent = thread_current();
-  
-  // printf("wait for %d\n", child_tid);
-  // // iterate through child_list and print element
-  // struct list_elem *e;
-  // struct thread *child;
-  // lock_acquire (&child_lock);
-  // for(e = list_begin(&parent->child_list); e != list_end(&parent->child_list); e = list_next (e)) {
-  //   child = list_entry(e, struct thread, child_elem);
-  //   printf("child %d %d", child->tid, child->wait);
-  // }
-  // printf("\n");
-  // lock_release (&child_lock);
   
   struct list_elem *e;
   struct wait_thread_elem *child;
