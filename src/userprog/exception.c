@@ -161,7 +161,7 @@ page_fault (struct intr_frame *f)
 
   /* check if the memory is unmapped */
   if(!is_valid_ptr (fault_addr)) {
-      syscall_exit (-1);
+      syscall_exit (STATUS_FAIL);
   }
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to

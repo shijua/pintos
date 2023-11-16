@@ -46,8 +46,6 @@ static void
 syscall_handler (struct intr_frame *f UNUSED) {
   /* retrieve the system call number */
   int syscall_num = *((int *) check_validation (f->esp));
-  // printf ("system call number: %d\n", syscall_num);
-  // printf ("thread number: %d\n", thread_current ()->tid);
   switch (syscall_num) {
     case SYS_HALT:
       syscall_halt();
@@ -175,10 +173,8 @@ syscall_open (const char *file) {
   } else {
     struct File_info *info = malloc (sizeof (struct File_info));
     if (info == NULL) {
-      printf ("file malloc failed\n");
       lock_release (&file_lock);
-      return -1;
-      // syscall_exit (STATUS_FAIL);
+      syscall_exit (STATUS_FAIL);
     }
     info->fd = thread_current ()->fd;
     info->file = f;

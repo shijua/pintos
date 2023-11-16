@@ -25,6 +25,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void free_para_list (struct list *parameter_list);
 static void free_file_list (struct list *file_list);
 static void free_child_list (struct list *child_list);
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -91,12 +92,11 @@ process_execute (const char *file_name)
     return TID_ERROR;
   }
   sema_down (&execute_sema);
+  palloc_free_page (fn_copy);
   if (exists == false) {
-    palloc_free_page (fn_copy);
     lock_release (&child_lock);
     return TID_ERROR;
   }
-  palloc_free_page (fn_copy);
   lock_release (&child_lock);
   return tid;
 }
@@ -120,9 +120,9 @@ start_process (void *parameter_list)
   /* If load failed, quit. */
   if (!success) {
     exists = false;
-    free_para_list(parameter_list);
+    free_para_list (parameter_list);
     sema_up (&execute_sema);
-    syscall_exit (-1);
+    syscall_exit (STATUS_FAIL);
     NOT_REACHED ();
   }
 
@@ -199,21 +199,14 @@ int
 process_wait (tid_t child_tid UNUSED) 
 {
   struct thread *parent = thread_current ();
-  
   struct list_elem *e;
-  struct wait_thread_elem *child;
+  struct wait_thread_elem *child = NULL;
   /* iterate through child list */
   lock_acquire (&child_lock);
   for (e = list_begin (&parent->child_list); 
        e != list_end (&parent->child_list); e = list_next (e)) {
     child = list_entry (e, struct wait_thread_elem, elem);
     if(child->tid == child_tid) {
-      /* if already been waited then terminate as it can only be waited once */
-      if (child->wait == true) {
-        lock_release (&child_lock);
-        return -1;
-      }
-      child->wait = true;
       break;
     }
   }
@@ -224,9 +217,12 @@ process_wait (tid_t child_tid UNUSED)
   }
   /* wait until child terminates */
   sema_down (&child->wait_sema);
+  /* free after waiting so that it will not be waiting multiple times */
   lock_acquire (&child_lock);
   int exit_code = child->exit_code;
   list_remove (e);
+  /* eliminate warnings */
+  ASSERT (child != NULL);
   free (child);
   lock_release (&child_lock);
   return exit_code;
@@ -627,35 +623,37 @@ install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
-
+/* functions for freeing all element in parameter list */
 static void
 free_para_list (struct list *parameter_list) {
   struct list_elem *e;
-  while(!list_empty(parameter_list)){
-    e = list_pop_back(parameter_list);
-    free(getParameter(e));
+  while(!list_empty (parameter_list)){
+    e = list_pop_back (parameter_list);
+    free (getParameter(e));
   }
-  free(parameter_list);
+  free (parameter_list);
 }
 
+/* function for freeing element in file list */
 static void
 free_file_list (struct list *file_list) {
   struct list_elem *e;
   while (!list_empty (file_list)) {
-    e = list_pop_back(file_list);
+    e = list_pop_back (file_list);
     struct File_info *info = list_entry (e, struct File_info, elem);
     file_close (info->file);
     free (info);
   }
 }
 
+/* function for freeing element in child list */
 static void
 free_child_list (struct list *child_list) 
 {
   struct list_elem *e;
-  while(!list_empty(child_list))
+  while(!list_empty (child_list))
   {
-    e = list_pop_back(child_list);
-    free(list_entry(e, struct wait_thread_elem, elem));
+    e = list_pop_back (child_list);
+    free (list_entry (e, struct wait_thread_elem, elem));
   }
 }

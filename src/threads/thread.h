@@ -123,7 +123,6 @@ struct thread
 /* struct use for indicate the status of child*/
 struct wait_thread_elem {
    tid_t tid;                          /* tid of child */
-   bool wait;                          /* wait status */
    int exit_code;                      /* exit code of child*/
    struct semaphore wait_sema;         /* origin 0 will be up when exit*/
    struct list_elem elem;              /* List element. */
