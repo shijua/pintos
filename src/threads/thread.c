@@ -72,6 +72,18 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+static void free_child_list (struct list *childList);
+
+static void
+free_child_list (struct list *childList) 
+{
+  struct list_elem *e;
+  while(!list_empty(childList))
+  {
+    e = list_pop_back(childList);
+    free(list_entry(e, struct wait_thread_elem, elem));
+  }
+}
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -313,7 +325,7 @@ void
 thread_exit (void) 
 {
   ASSERT (!intr_context ());
-
+  free_child_list (&thread_current() -> child_list);
 #ifdef USERPROG
   process_exit ();
 #endif

@@ -22,6 +22,7 @@
 static bool exists; /* use for indicate whether executable file exists */
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void free_para_list (struct list *parameterList);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -63,6 +64,7 @@ process_execute (const char *file_name)
   paraSize += STACK_BASE;
   if (paraSize > PGSIZE) {
     palloc_free_page (fn_copy);
+    free_para_list(parameterList);
     return TID_ERROR;
   }
   char *fileName = getParameter (list_back (parameterList)) -> data;
@@ -77,6 +79,16 @@ process_execute (const char *file_name)
     return TID_ERROR;
   }
   return tid;
+}
+
+static void
+free_para_list (struct list *parameterList) {
+  struct list_elem *e;
+  while(!list_empty(parameterList)){
+    e = list_pop_back(parameterList);
+    free(getParameter(e));
+  }
+  free(parameterList);
 }
 
 /* A thread function that loads a user process and starts it
@@ -99,6 +111,7 @@ start_process (void *parameterList)
   if (!success) {
     exists = false;
     sema_up (&execute_sema);
+    free_para_list(parameterList);
     syscall_exit (-1);
     NOT_REACHED ();
   }
@@ -152,6 +165,7 @@ start_process (void *parameterList)
   /* return address */
   *_esp -= 4;
   memset ((char *)if_.esp, 0, 4);
+  free_para_list(parameterList);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -200,7 +214,7 @@ process_wait (tid_t child_tid UNUSED)
   }
   /* wait until child terminates */
   sema_down (&child->wait_sema);
-  return (child->exit_code);
+  return child->exit_code;
 }
 
 /* Free the current process's resources. */
@@ -212,6 +226,7 @@ process_exit (void)
   /* allow write to executable file after process terminates */
   if(cur -> executableFile != NULL) {
     file_allow_write (cur -> executableFile);
+    file_close(cur -> executableFile);
   }
 
   /* Destroy the current process's page directory and switch back
