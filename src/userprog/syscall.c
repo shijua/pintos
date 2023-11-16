@@ -124,6 +124,9 @@ void
 syscall_exit (int status) {
   struct thread* cur = thread_current ();
   printf ("%s: exit(%d)\n", cur->name, status);
+  if (file_lock.holder == cur) {
+    lock_release (&file_lock);
+  }
   *(cur->exit_code) = status;
   sema_up (cur->wait_sema);
   thread_exit ();

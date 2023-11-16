@@ -96,7 +96,7 @@ static void
 free_file_list () {
   struct list_elem *e;
   while (!list_empty(&thread_current ()->file_list)) {
-    e = list_pop_back(!list_empty(&thread_current ()->file_list));
+    e = list_pop_back(&thread_current ()->file_list);
     struct File_info *info = list_entry (e, struct File_info, elem);
     file_close (info->file);
     free (info);
