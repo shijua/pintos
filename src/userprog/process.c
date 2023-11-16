@@ -31,7 +31,6 @@ static void free_para_list (struct list *parameterList);
 tid_t
 process_execute (const char *file_name) 
 {
-  exists = true;
   char *fn_copy;
   tid_t tid;
 
@@ -71,13 +70,15 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   lock_acquire (&child_lock);
+  exists = true;
   tid = thread_create (fileName, PRI_DEFAULT, start_process, parameterList);
   sema_down (&execute_sema);
-  lock_release (&child_lock);
   if (exists == false) {
     palloc_free_page (fn_copy);
+    lock_release (&child_lock);
     return TID_ERROR;
   }
+  lock_release (&child_lock);
   return tid;
 }
 
@@ -89,6 +90,17 @@ free_para_list (struct list *parameterList) {
     free(getParameter(e));
   }
   free(parameterList);
+}
+
+static void
+free_file_list () {
+  struct list_elem *e;
+  while (!list_empty(&thread_current ()->file_list)) {
+    e = list_pop_back(!list_empty(&thread_current ()->file_list));
+    struct File_info *info = list_entry (e, struct File_info, elem);
+    file_close (info->file);
+    free (info);
+  }
 }
 
 /* A thread function that loads a user process and starts it
@@ -224,10 +236,12 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
   /* allow write to executable file after process terminates */
-  if(cur -> executableFile != NULL) {
-    file_allow_write (cur -> executableFile);
-    file_close(cur -> executableFile);
+  lock_acquire (&file_lock);
+  if (cur -> executableFile != NULL) {
+    file_close (cur -> executableFile);
   }
+  free_file_list ();
+  lock_release (&file_lock);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

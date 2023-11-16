@@ -28,7 +28,6 @@ static void syscall_seek (int, unsigned);
 static void syscall_tell (int);
 static void syscall_close (int);
 
-static void check_null_file (struct file *file);
 static struct File_info *get_file_info (int fd);
 
 /* Three functions used for checking user memory access safety. */
@@ -47,7 +46,8 @@ static void
 syscall_handler (struct intr_frame *f UNUSED) {
   /* retrieve the system call number */
   int syscall_num = *((int *) check_validation (f->esp));
-
+  // printf ("system call number: %d\n", syscall_num);
+  // printf ("thread number: %d\n", thread_current ()->tid);
   switch (syscall_num) {
     case SYS_HALT:
       syscall_halt();
@@ -184,7 +184,10 @@ static int
 syscall_filesize (int fd) {
   lock_acquire (&file_lock);
   struct File_info *info = get_file_info (fd);
-  check_null_file (info->file);
+  if (CHECK_NULL_FILE (info->file)) {
+    lock_release (&file_lock);
+    syscall_exit (STATUS_FAIL);
+  }
   int size = file_length (info->file);
   lock_release (&file_lock);
   return size;
@@ -203,7 +206,10 @@ syscall_read (int fd, void *buffer, unsigned size) {
   }
   lock_acquire (&file_lock);
   struct File_info *info = get_file_info (fd);
-  check_null_file (info->file);
+  if (CHECK_NULL_FILE (info->file)) {
+    lock_release (&file_lock);
+    syscall_exit (STATUS_FAIL);
+  }
   int read_size = file_read (info->file, buffer, size);
   lock_release (&file_lock);
   return read_size;
@@ -220,7 +226,10 @@ syscall_write (int fd, void *buffer, unsigned size) {
   }
   lock_acquire (&file_lock);
   struct File_info *info = get_file_info (fd);
-  check_null_file (info->file);
+  if (CHECK_NULL_FILE (info->file)) {
+    lock_release (&file_lock);
+    syscall_exit (STATUS_FAIL);
+  }
   int write_size = file_write (info->file, buffer, size);
   lock_release (&file_lock);
   return write_size;
@@ -254,24 +263,14 @@ syscall_tell (int fd) {
    all its open ﬁle descriptors, as if by calling this function for each one. */
 static void
 syscall_close (int fd) {
-  lock_acquire(&file_lock);
-  struct File_info *info = get_file_info(fd);
+  lock_acquire (&file_lock);
+  struct File_info *info = get_file_info (fd);
   if (info) {
     file_close (info->file);
     list_remove (&info->elem);
     free (info);
   }
   lock_release (&file_lock);
-}
-
-/* use for checking whether file retained is null or not */
-static void
-check_null_file (struct file *file) {
-  if (file == NULL) {
-    /* release the lock as it is acquired */
-    lock_release (&file_lock);
-    syscall_exit (-1);
-  }
 }
 
 /* get file info from fd */

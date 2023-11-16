@@ -5,6 +5,7 @@
 
 #define STATUS_FAIL -1 /* Status code for syscall */
 #define USER_BOTTOM 0x0804800 /* Bottom of user address */
+#define CHECK_NULL_FILE(file) file==NULL /* Check whether file is null */
 
 typedef int pid_t;
 #define PID_ERROR ((pid_t) -1)          /* Error value for pid_t. */
