@@ -22,8 +22,9 @@
 static bool exists; /* use for indicate whether executable file exists */
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-static void free_para_list (struct list *parameterList);
+static void free_para_list (struct list *parameter_list);
 static void free_file_list (struct list *file_list);
+static void free_child_list (struct list *child_list);
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -37,14 +38,19 @@ process_execute (const char *file_name)
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  if (fn_copy == NULL) {
     return TID_ERROR;
+  }
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Argument Passing. */
   /* initialise a parameter list to store parameter */ 
-  struct list *parameterList = malloc (sizeof (struct list));
-  list_init (parameterList);
+  struct list *parameter_list = malloc (sizeof (struct list));
+  if (parameter_list == NULL) {
+    palloc_free_page (fn_copy);
+    return TID_ERROR;
+  }
+  list_init (parameter_list);
   
   char *token;
   char *cpointer = fn_copy;
@@ -54,27 +60,32 @@ process_execute (const char *file_name)
     if (strlen(token) > 0) {
       /* use malloc, otherwise the variable get in the loop will be the same. */
       struct parameterValue *para = malloc (sizeof (struct parameterValue));
+      if (para == NULL) {
+        palloc_free_page (fn_copy);
+        free_para_list (parameter_list);
+        return TID_ERROR;
+      }
       para -> data = token;
       paraSize += strlen (para -> data) + PTR_SIZE + STRING_BLANK;
-      list_push_front (parameterList, &para->elem);
+      list_push_front (parameter_list, &para->elem);
     }
     token = strtok_r(cpointer, " ", &cpointer);
   }
   paraSize += STACK_BASE;
   if (paraSize > PGSIZE) {
     palloc_free_page (fn_copy);
-    free_para_list(parameterList);
+    free_para_list (parameter_list);
     return TID_ERROR;
   }
-  char *fileName = getParameter (list_back (parameterList)) -> data;
+  char *fileName = getParameter (list_back (parameter_list)) -> data;
 
   /* Create a new thread to execute FILE_NAME. */
   lock_acquire (&child_lock);
   exists = true;
-  tid = thread_create (fileName, PRI_DEFAULT, start_process, parameterList);
+  tid = thread_create (fileName, PRI_DEFAULT, start_process, parameter_list);
   /* if memory is full */
   if (tid == TID_ERROR) {
-    free_para_list(parameterList);
+    free_para_list (parameter_list);
     palloc_free_page (fn_copy);
     lock_release (&child_lock);
     return TID_ERROR;
@@ -85,37 +96,17 @@ process_execute (const char *file_name)
     lock_release (&child_lock);
     return TID_ERROR;
   }
+  palloc_free_page (fn_copy);
   lock_release (&child_lock);
   return tid;
-}
-
-static void
-free_para_list (struct list *parameterList) {
-  struct list_elem *e;
-  while(!list_empty(parameterList)){
-    e = list_pop_back(parameterList);
-    free(getParameter(e));
-  }
-  free(parameterList);
-}
-
-static void
-free_file_list (struct list *file_list) {
-  struct list_elem *e;
-  while (!list_empty(file_list)) {
-    e = list_pop_back(file_list);
-    struct File_info *info = list_entry (e, struct File_info, elem);
-    file_close (info->file);
-    free (info);
-  }
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *parameterList)
+start_process (void *parameter_list)
 {
-  char *file_name = getParameter (list_back (parameterList)) -> data;
+  char *file_name = getParameter (list_back (parameter_list)) -> data;
   struct intr_frame if_;
   bool success;
 
@@ -129,16 +120,16 @@ start_process (void *parameterList)
   /* If load failed, quit. */
   if (!success) {
     exists = false;
+    free_para_list(parameter_list);
     sema_up (&execute_sema);
-    free_para_list(parameterList);
     syscall_exit (-1);
     NOT_REACHED ();
   }
 
   /* deny write when execute this file */
-  struct file *executableFile = filesys_open (file_name);
-  thread_current ()->executableFile = executableFile;
-  file_deny_write (executableFile);
+  struct file *executable_file = filesys_open (file_name);
+  thread_current ()->executable_file = executable_file;
+  file_deny_write (executable_file);
   sema_up (&execute_sema);
 
   int * _esp = (int *)&if_.esp;
@@ -147,7 +138,7 @@ start_process (void *parameterList)
   char *para;
   int size = 0;
   /* argv */
-  for (e = list_begin (parameterList); e != list_end (parameterList);
+  for (e = list_begin (parameter_list); e != list_end (parameter_list);
        e = list_next (e)) {
     para = getParameter(e) -> data;
     *_esp -= strlen (para) + 1;
@@ -167,13 +158,14 @@ start_process (void *parameterList)
   /* argv[0] - argv[argc - 1] */
   index += mod;
   int add;
-  for (e = list_begin (parameterList); e != list_end (parameterList);
+  for (e = list_begin (parameter_list); e != list_end (parameter_list);
        e = list_next (e)) {
     add = getParameter(e) -> address;
     *_esp -= 4;
     index += 4;
     memcpy ((char *)if_.esp, &(add), 4);
   }
+  free_para_list(parameter_list);
   /* argv */
   *_esp -= 4;
   int argv = (int)if_.esp + 4;
@@ -184,7 +176,6 @@ start_process (void *parameterList)
   /* return address */
   *_esp -= 4;
   memset ((char *)if_.esp, 0, 4);
-  free_para_list(parameterList);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -215,11 +206,11 @@ process_wait (tid_t child_tid UNUSED)
   lock_acquire (&child_lock);
   for (e = list_begin (&parent->child_list); 
        e != list_end (&parent->child_list); e = list_next (e)) {
-    child = list_entry(e, struct wait_thread_elem, elem);
+    child = list_entry (e, struct wait_thread_elem, elem);
     if(child->tid == child_tid) {
       /* if already been waited then terminate as it can only be waited once */
       if (child->wait == true) {
-        lock_release(&child_lock);
+        lock_release (&child_lock);
         return -1;
       }
       child->wait = true;
@@ -233,7 +224,12 @@ process_wait (tid_t child_tid UNUSED)
   }
   /* wait until child terminates */
   sema_down (&child->wait_sema);
-  return child->exit_code;
+  lock_acquire (&child_lock);
+  int exit_code = child->exit_code;
+  list_remove (e);
+  free (child);
+  lock_release (&child_lock);
+  return exit_code;
 }
 
 /* Free the current process's resources. */
@@ -244,11 +240,12 @@ process_exit (void)
   uint32_t *pd;
   /* allow write to executable file after process terminates */
   lock_acquire (&file_lock);
-  if (cur -> executableFile != NULL) {
-    file_close (cur -> executableFile);
+  if (cur -> executable_file != NULL) {
+    file_close (cur -> executable_file);
   }
   free_file_list (&cur -> file_list);
   lock_release (&file_lock);
+  free_child_list (&thread_current() -> child_list);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -628,4 +625,37 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+
+static void
+free_para_list (struct list *parameter_list) {
+  struct list_elem *e;
+  while(!list_empty(parameter_list)){
+    e = list_pop_back(parameter_list);
+    free(getParameter(e));
+  }
+  free(parameter_list);
+}
+
+static void
+free_file_list (struct list *file_list) {
+  struct list_elem *e;
+  while (!list_empty (file_list)) {
+    e = list_pop_back(file_list);
+    struct File_info *info = list_entry (e, struct File_info, elem);
+    file_close (info->file);
+    free (info);
+  }
+}
+
+static void
+free_child_list (struct list *child_list) 
+{
+  struct list_elem *e;
+  while(!list_empty(child_list))
+  {
+    e = list_pop_back(child_list);
+    free(list_entry(e, struct wait_thread_elem, elem));
+  }
 }

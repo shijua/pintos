@@ -72,18 +72,8 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-static void free_child_list (struct list *childList);
+// static void free_child_list (struct list *childList);
 
-static void
-free_child_list (struct list *childList) 
-{
-  struct list_elem *e;
-  while(!list_empty(childList))
-  {
-    e = list_pop_back(childList);
-    free(list_entry(e, struct wait_thread_elem, elem));
-  }
-}
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -205,13 +195,18 @@ thread_create (const char *name, int priority,
     return TID_ERROR;
 
   /* Initialize thread. */
-  struct wait_thread_elem *wait_elem = malloc (sizeof(struct wait_thread_elem));
+  
   init_thread (t, name, priority);
+  tid = t->tid = allocate_tid ();
+  struct wait_thread_elem *wait_elem = malloc (sizeof(struct wait_thread_elem));
+  if (wait_elem == NULL) {
+    printf ("wwwmalloc failed\n");
+    return TID_ERROR;
+  }
   t->exit_code = &wait_elem->exit_code;
   t->wait_sema = &wait_elem->wait_sema;
   wait_elem->wait = false;
   sema_init (t->wait_sema, 0);
-  tid = t->tid = allocate_tid ();
   wait_elem->tid = t -> tid;
   list_push_back (&thread_current ()->child_list, &wait_elem->elem);
 
@@ -325,7 +320,6 @@ void
 thread_exit (void) 
 {
   ASSERT (!intr_context ());
-  free_child_list (&thread_current() -> child_list);
 #ifdef USERPROG
   process_exit ();
 #endif

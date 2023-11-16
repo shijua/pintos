@@ -174,6 +174,12 @@ syscall_open (const char *file) {
     return -1;
   } else {
     struct File_info *info = malloc (sizeof (struct File_info));
+    if (info == NULL) {
+      printf ("file malloc failed\n");
+      lock_release (&file_lock);
+      return -1;
+      // syscall_exit (STATUS_FAIL);
+    }
     info->fd = thread_current ()->fd;
     info->file = f;
     list_push_back (&thread_current ()->file_list, &info->elem);
