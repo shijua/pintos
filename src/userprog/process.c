@@ -23,7 +23,7 @@ static bool exists; /* use for indicate whether executable file exists */
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 static void free_para_list (struct list *parameterList);
-
+static void free_file_list (struct list *file_list);
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -42,7 +42,7 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* Argument Passing. */
-  /* initialise a parameter list to store parameter */
+  /* initialise a parameter list to store parameter */ 
   struct list *parameterList = malloc (sizeof (struct list));
   list_init (parameterList);
   
@@ -72,6 +72,13 @@ process_execute (const char *file_name)
   lock_acquire (&child_lock);
   exists = true;
   tid = thread_create (fileName, PRI_DEFAULT, start_process, parameterList);
+  /* if memory is full */
+  if (tid == TID_ERROR) {
+    free_para_list(parameterList);
+    palloc_free_page (fn_copy);
+    lock_release (&child_lock);
+    return TID_ERROR;
+  }
   sema_down (&execute_sema);
   if (exists == false) {
     palloc_free_page (fn_copy);
@@ -93,10 +100,10 @@ free_para_list (struct list *parameterList) {
 }
 
 static void
-free_file_list () {
+free_file_list (struct list *file_list) {
   struct list_elem *e;
-  while (!list_empty(&thread_current ()->file_list)) {
-    e = list_pop_back(&thread_current ()->file_list);
+  while (!list_empty(file_list)) {
+    e = list_pop_back(file_list);
     struct File_info *info = list_entry (e, struct File_info, elem);
     file_close (info->file);
     free (info);
@@ -240,7 +247,7 @@ process_exit (void)
   if (cur -> executableFile != NULL) {
     file_close (cur -> executableFile);
   }
-  free_file_list ();
+  free_file_list (&cur -> file_list);
   lock_release (&file_lock);
 
   /* Destroy the current process's page directory and switch back
