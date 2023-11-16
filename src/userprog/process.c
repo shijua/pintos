@@ -60,7 +60,7 @@ process_execute (const char *file_name)
   while (token != NULL) {
     if (strlen(token) > 0) {
       /* use malloc, otherwise the variable get in the loop will be the same. */
-      struct parameterValue *para = malloc (sizeof (struct parameterValue));
+      struct parameter_value *para = malloc (sizeof (struct parameter_value));
       if (para == NULL) {
         palloc_free_page (fn_copy);
         free_para_list (parameter_list);
@@ -78,7 +78,7 @@ process_execute (const char *file_name)
     free_para_list (parameter_list);
     return TID_ERROR;
   }
-  char *fileName = getParameter (list_back (parameter_list)) -> data;
+  char *fileName = GET_PARAMETER (list_back (parameter_list)) -> data;
 
   /* Create a new thread to execute FILE_NAME. */
   lock_acquire (&child_lock);
@@ -106,7 +106,7 @@ process_execute (const char *file_name)
 static void
 start_process (void *parameter_list)
 {
-  char *file_name = getParameter (list_back (parameter_list)) -> data;
+  char *file_name = GET_PARAMETER (list_back (parameter_list)) -> data;
   struct intr_frame if_;
   bool success;
 
@@ -140,11 +140,11 @@ start_process (void *parameter_list)
   /* argv */
   for (e = list_begin (parameter_list); e != list_end (parameter_list);
        e = list_next (e)) {
-    para = getParameter(e) -> data;
+    para = GET_PARAMETER(e) -> data;
     *_esp -= strlen (para) + 1;
     index += strlen (para) + 1;
     strlcpy((char *)if_.esp, para, strlen (para) + 1);
-    getParameter(e) ->address = (unsigned)if_.esp;
+    GET_PARAMETER(e) ->address = (unsigned)if_.esp;
     size++;
   }
   /* word align */
@@ -160,7 +160,7 @@ start_process (void *parameter_list)
   int add;
   for (e = list_begin (parameter_list); e != list_end (parameter_list);
        e = list_next (e)) {
-    add = getParameter(e) -> address;
+    add = GET_PARAMETER(e) -> address;
     *_esp -= 4;
     index += 4;
     memcpy ((char *)if_.esp, &(add), 4);
@@ -629,7 +629,7 @@ free_para_list (struct list *parameter_list) {
   struct list_elem *e;
   while(!list_empty (parameter_list)){
     e = list_pop_back (parameter_list);
-    free (getParameter(e));
+    free (GET_PARAMETER(e));
   }
   free (parameter_list);
 }

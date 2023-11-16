@@ -160,7 +160,7 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
   /* check if the memory is unmapped */
-  if(!is_valid_ptr (fault_addr)) {
+  if (!is_valid_ptr (fault_addr)) {
       syscall_exit (STATUS_FAIL);
   }
   /* To implement virtual memory, delete the rest of the function

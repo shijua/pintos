@@ -25,6 +25,7 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+#ifdef USERPROG
 /* set a global lock for file system */
 struct lock file_lock;
 /* lock used for TODO*/
@@ -32,6 +33,7 @@ struct lock child_lock;
 /* lock used for ensure check whether process 
    is created successfully before return tid */
 struct semaphore execute_sema;
+#endif
 
 /* A kernel thread or user process.
 
@@ -98,28 +100,28 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    /* List of files opened by the thread. */
-    struct list file_list;
-    /* The file descriptor number. */
-    int fd;
-
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
+    uint32_t *pagedir;                 /* Page directory. */
+
+    struct list file_list;             /* List of files opened by the thread. */
+    int fd;                            /* The file descriptor number. */
+    
+    struct list child_list;            /* List of child threads. */
+    struct file *executable_file;      /* represent the executable */
+    int *exit_code;                    /* the pointer to exit code */
+    struct semaphore *wait_sema;       /* origin 0 will be up when exit */
 #endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
-
-    struct list child_list;             /* List of child threads. */
-    struct file *executable_file;        /* represent the executable */
-    int *exit_code;                     /* the pointer to exit code */
-    struct semaphore *wait_sema;        /* origin 0 will be up when exit */
   };
 
+#ifdef USERPROG
 /* struct use for indicate the status of child*/
 struct wait_thread_elem {
    tid_t tid;                          /* tid of child */
@@ -127,6 +129,7 @@ struct wait_thread_elem {
    struct semaphore wait_sema;         /* origin 0 will be up when exit*/
    struct list_elem elem;              /* List element. */
 };
+#endif
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -164,7 +167,5 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
-bool check_tid(tid_t);
 
 #endif /* threads/thread.h */

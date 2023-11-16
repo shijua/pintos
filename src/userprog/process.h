@@ -5,8 +5,8 @@
 #include "syscall.h"
 
 /* shortcur to express list_entry*/
-#define getParameter(LIST_ELEM) list_entry \
-    (LIST_ELEM, struct parameterValue, elem)
+#define GET_PARAMETER(LIST_ELEM) list_entry \
+    (LIST_ELEM, struct parameter_value, elem)
 
 /* Coefficient for stack overflow. */
 #define PTR_SIZE 4
@@ -19,7 +19,7 @@ void process_exit (void);
 void process_activate (void);
 
 /* structure to express the content in parameter */
-struct parameterValue {
+struct parameter_value {
     char *data;
     uint32_t address;
     struct list_elem elem;

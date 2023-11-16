@@ -90,13 +90,14 @@ void
 thread_init (void) 
 {
   ASSERT (intr_get_level () == INTR_OFF);
-
   lock_init (&tid_lock);
-  lock_init (&child_lock);
-  sema_init (&execute_sema, 0);
   list_init (&ready_list);
   list_init (&all_list);
+#ifdef USERPROG
+  lock_init (&child_lock);
+  sema_init (&execute_sema, 0);
   lock_init (&file_lock);
+#endif
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -193,9 +194,9 @@ thread_create (const char *name, int priority,
     return TID_ERROR;
 
   /* Initialize thread. */
-  
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+#ifdef USERPROG
   struct wait_thread_elem *wait_elem = malloc (sizeof(struct wait_thread_elem));
   if (wait_elem == NULL) {
     return TID_ERROR;
@@ -210,7 +211,7 @@ thread_create (const char *name, int priority,
   list_init (&t->file_list);
   /* initialize file descriptor number */
   t->fd = START_FD;
-
+#endif
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
      member cannot be observed. */
@@ -316,7 +317,7 @@ void
 thread_exit (void) 
 {
   ASSERT (!intr_context ());
-  
+
 #ifdef USERPROG
   process_exit ();
 #endif
@@ -498,9 +499,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
-  /* for task 2*/
+#ifdef USERPROG
   list_init (&t->child_list);
-
+#endif
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
