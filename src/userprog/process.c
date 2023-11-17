@@ -24,9 +24,9 @@ static thread_func start_process NO_RETURN;
 static bool load (const char *, void (**eip) (void), void **);
 static void free_child_list (struct list *);
 
-struct arg_para{
+struct arg_para {
   char *cpointer;
-  char *fileName;
+  char *file_name;
 };
 
 /* Starts a new thread running a user program loaded from
@@ -34,7 +34,7 @@ struct arg_para{
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
+process_execute (const char *cmd_line) 
 {
   char *fn_copy;
   tid_t tid;
@@ -45,15 +45,15 @@ process_execute (const char *file_name)
   if (fn_copy == NULL) {
     return TID_ERROR;
   }
-  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (fn_copy, cmd_line, PGSIZE);
   
   /* get file name */
   char *cpointer = fn_copy;
   char *token = strtok_r (cpointer, " ", &cpointer);
-  char *fileName = NULL;
+  char *file_name = NULL;
   while (token != NULL) {
     if (strlen(token) > 0) {
-      fileName = token;
+      file_name = token;
       break;
     }
     token = strtok_r(cpointer, " ", &cpointer);
@@ -61,12 +61,12 @@ process_execute (const char *file_name)
 
   struct arg_para create_para;
   create_para.cpointer = cpointer;
-  create_para.fileName = fileName;
+  create_para.file_name = file_name;
 
   /* Create a new thread to execute FILE_NAME. */
   lock_acquire (&child_lock);
   exists = true;
-  tid = thread_create (fileName, PRI_DEFAULT, start_process, &create_para);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, &create_para);
   /* if memory is full */
   if (tid == TID_ERROR) {
     palloc_free_page (fn_copy);
@@ -93,7 +93,7 @@ start_process (void *create_para)
   hash_init (&cur->file_table, file_hash_func, file_less_func, NULL);
 
   /* get file name */
-  char *file_name = ((struct arg_para*)create_para) -> fileName;
+  char *file_name = ((struct arg_para*)create_para) -> file_name;
   char *cpointer = ((struct arg_para*)create_para) -> cpointer;
   char *token = file_name;
 
