@@ -18,9 +18,10 @@ typedef int pid_t;
 
 void syscall_init (void);
 void syscall_exit (int);
-hash_hash_func file_hash_func;
-hash_less_func file_less_func;
-hash_action_func free_struct_file;
+unsigned file_hash_func (const struct hash_elem *element, void *aux UNUSED);
+bool file_less_func (const struct hash_elem *a, const struct hash_elem *b, 
+                                                void *aux UNUSED);
+void free_struct_file (struct hash_elem *element, void *aux UNUSED);
 
 /* File descriptor which store the file and the file descriptor number */
 struct File_info {

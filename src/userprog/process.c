@@ -22,7 +22,6 @@
 static bool exists; /* use for indicate whether executable file exists */
 static thread_func start_process NO_RETURN;
 static bool load (const char *, void (**eip) (void), void **);
-static void free_para_list (struct list *);
 static void free_child_list (struct list *);
 
 /* Starts a new thread running a user program loaded from
@@ -54,6 +53,7 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
   strlcpy (fn_copy1, file_name, PGSIZE);
   
+  /* get file name */
   char *cpointer = fn_copy;
   char *token = strtok_r (cpointer, " ", &cpointer);
   char *fileName = NULL;
@@ -71,7 +71,6 @@ process_execute (const char *file_name)
   tid = thread_create (fileName, PRI_DEFAULT, start_process, fn_copy1);
   /* if memory is full */
   if (tid == TID_ERROR) {
-    // free_para_list (parameter_list);
     palloc_free_page (fn_copy);
     palloc_free_page (fn_copy1);
     lock_release (&child_lock);
@@ -97,6 +96,7 @@ start_process (void *fn_copy)
   struct thread* cur = thread_current();
   hash_init (&cur->file_table, file_hash_func, file_less_func, NULL);
 
+  /* get file name */
   char *file_name = NULL;
   char *cpointer = fn_copy;
   char *token = strtok_r (cpointer, " ", &cpointer);
@@ -107,7 +107,7 @@ start_process (void *fn_copy)
     }
     token = strtok_r(cpointer, " ", &cpointer);
   }
-  // printf(file_name);
+
   struct intr_frame if_;
   bool success;
 
@@ -132,60 +132,63 @@ start_process (void *fn_copy)
   cur->executable_file = executable_file;
   file_deny_write (executable_file);
 
-  int *_esp = (int *)&if_.esp;
-  int *stack_bottom =((uint8_t *)if_.esp) - PGSIZE;
-  int *pstack = stack_bottom;
-  int size = 0;
-  int paraSize =0;
+  /* address we stored is 32 bit */
+  uint8_t **_esp = (uint8_t **) &if_.esp;
+  uint32_t *stack_bottom = (uint32_t *) ((uint8_t *) if_.esp - PGSIZE);
+  /* use for storing arguments */
+  uint32_t *pstack = stack_bottom;
+  uint32_t size = 0;
+  uint32_t para_size = 0;
 
   /* argv */
    while (token != NULL) {
     if (strlen(token) > 0) {
-      *(pstack) = (int)token;
+      *(pstack) = (uint32_t) token;
       pstack++;
-      paraSize += strlen (token) + PTR_SIZE + STRING_BLANK;
+      para_size += strlen (token) + PTR_SIZE + STRING_BLANK;
       size++;
     }
     token = strtok_r(cpointer, " ", &cpointer);
   }
-  paraSize += STACK_BASE;
-
-  if (paraSize > PGSIZE) {
+  para_size += STACK_BASE;
+  /* check if it exceed */
+  if (para_size > PGSIZE) {
     exists = false;
     sema_up (&execute_sema);
     syscall_exit (STATUS_FAIL);
     NOT_REACHED ();
   }
-
-  for(int i = size - 1; i >= 0; i--){
-    *_esp -= strlen (stack_bottom[i]) + 1;
-    strlcpy((char *)if_.esp, stack_bottom[i], strlen (stack_bottom[i]) + 1);
-    stack_bottom[i] = if_.esp;
+  /* push element into stack */
+  for(int i = size - 1; i >= 0; i--) {
+    *_esp -= strlen ((char *) stack_bottom[i]) + STRING_BLANK;
+    strlcpy((char *) if_.esp, (char *) stack_bottom[i], 
+                              strlen ((char *) stack_bottom[i]) + STRING_BLANK);
+    stack_bottom[i] = (int) if_.esp;
   }
 
   /* word align */
-  int mod = 4 - (*_esp) % 4;
-  if(mod == 4) mod = 0;
+  int mod = PTR_SIZE - (uint32_t) (*_esp) % PTR_SIZE;
+  if(mod == PTR_SIZE) mod = 0;
   *_esp -= mod;
-  memset((char *)if_.esp, 0, mod);
+  memset(if_.esp, 0, mod);
   /* argv[argc] */
-  *_esp -= 4;
-  memset((char *)if_.esp, 0, 4);
+  *_esp -= PTR_SIZE;
+  memset(if_.esp, 0, PTR_SIZE);
   /* argv[0] - argv[argc - 1] */
-  for(int i =  size - 1; i >= 0; i--){
-    *_esp -= 4;
-    memcpy ((char *)if_.esp, &(stack_bottom[i]), 4);
+  for(int i =  size - 1; i >= 0; i--) {
+    *_esp -= PTR_SIZE;
+    memcpy (if_.esp, &(stack_bottom[i]), PTR_SIZE);
   }
   /* argv */
-  *_esp -= 4;
-  int argv = (int)if_.esp + 4;
-  memcpy ((char *)if_.esp, &argv, 4);
+  *_esp -= PTR_SIZE;
+  int argv = (uint32_t) if_.esp + PTR_SIZE;
+  memcpy (if_.esp, &argv, PTR_SIZE);
   /* argc */
-  *_esp -= 4;
-  memcpy ((char *)if_.esp, &size, 4);
+  *_esp -= PTR_SIZE;
+  memcpy (if_.esp, &size, PTR_SIZE);
   /* return address */
-  *_esp -= 4;
-  memset ((char *)if_.esp, 0, 4);
+  *_esp -= PTR_SIZE;
+  memset (if_.esp, 0, PTR_SIZE);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -633,18 +636,6 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
-
-/* functions for freeing all element in parameter list */
-static void
-free_para_list (struct list *parameter_list) {
-  struct list_elem *e;
-  while(!list_empty (parameter_list)){
-    e = list_pop_back (parameter_list);
-    free (GET_PARAMETER(e));
-  }
-  free (parameter_list);
-}
-
 
 /* function for freeing element in child list */
 static void

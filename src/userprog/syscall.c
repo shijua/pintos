@@ -13,6 +13,7 @@
 #include "threads/malloc.h"
 #include "devices/shutdown.h"
 #include "userprog/process.h"
+#include <inttypes.h>
 
 static void syscall_handler (struct intr_frame *);
 static void syscall_halt (void);
@@ -36,13 +37,13 @@ static void check_validation_rw (const void *, unsigned);
 static void check_validation_str (const char **vaddr);
 
 unsigned 
-file_hash_func(const struct hash_elem *element, void *aux UNUSED) 
+file_hash_func (const struct hash_elem *element, void *aux UNUSED) 
 {
   return(hash_int(GET_FILE(element)->fd));
 }
 
 bool 
-file_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
+file_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
 {
   return(GET_FILE(a)->fd < GET_FILE(b)->fd);
 }
@@ -141,7 +142,7 @@ syscall_halt (void) {
 void 
 syscall_exit (int status) {
   struct thread* cur = thread_current ();
-  printf ("%s: exit(%d)\n", cur->name, status);
+  printf ("%s: exit(%"PRId32")\n", cur->name, status);
   /* ensure the file lock has been released */
   if (file_lock.holder == cur) {
     lock_release (&file_lock);
@@ -149,8 +150,8 @@ syscall_exit (int status) {
   if (cur -> parent_status == false && cur -> child_status_pointer != NULL) {
     *(cur -> child_status_pointer) = true;
     sema_up (cur->wait_sema);
+    *(cur->exit_code) = status;
   }
-  *(cur->exit_code) = status;
   thread_exit ();
   NOT_REACHED ();
 }
