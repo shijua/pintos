@@ -209,9 +209,6 @@ thread_create (const char *name, int priority,
   sema_init (t->wait_sema, 0);
   wait_elem->tid = t -> tid;
   list_push_back (&thread_current ()->child_list, &wait_elem->elem);
-
-  /* initialize file list */
-  list_init (&t->file_list);
   /* initialize file descriptor number */
   t->fd = START_FD;
 #endif

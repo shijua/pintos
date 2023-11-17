@@ -3,6 +3,7 @@
 
 #include <debug.h>
 #include <list.h>
+#include <hash.h>
 #include <stdint.h>
 #include "threads/synch.h"
 
@@ -110,7 +111,7 @@ struct thread
     bool parent_status;                /* represent parent status*/
     bool *child_status_pointer;        /* pointer to child status owned by parents*/
 
-    struct list file_list;             /* List of files opened by the thread. */
+    struct hash file_table;             /* List of files opened by the thread. */
     int fd;                            /* The file descriptor number. */
     
     struct list child_list;            /* List of child threads. */

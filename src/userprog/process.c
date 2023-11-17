@@ -21,10 +21,9 @@
 
 static bool exists; /* use for indicate whether executable file exists */
 static thread_func start_process NO_RETURN;
-static bool load (const char *cmdline, void (**eip) (void), void **esp);
-static void free_para_list (struct list *parameter_list);
-static void free_file_list (struct list *file_list);
-static void free_child_list (struct list *child_list);
+static bool load (const char *, void (**eip) (void), void **);
+static void free_para_list (struct list *);
+static void free_child_list (struct list *);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -106,6 +105,9 @@ process_execute (const char *file_name)
 static void
 start_process (void *parameter_list)
 {
+  /* initialize file list */
+  hash_init (&thread_current()->file_table, file_hash_func, file_less_func, NULL);
+
   char *file_name = GET_PARAMETER (list_back (parameter_list)) -> data;
   struct intr_frame if_;
   bool success;
@@ -239,7 +241,7 @@ process_exit (void)
   if (cur -> executable_file != NULL) {
     file_close (cur -> executable_file);
   }
-  free_file_list (&cur -> file_list);
+  hash_destroy (&cur -> file_table, free_struct_file);
   lock_release (&file_lock);
   free_child_list (&thread_current() -> child_list);
 
@@ -634,17 +636,6 @@ free_para_list (struct list *parameter_list) {
   free (parameter_list);
 }
 
-/* function for freeing element in file list */
-static void
-free_file_list (struct list *file_list) {
-  struct list_elem *e;
-  while (!list_empty (file_list)) {
-    e = list_pop_back (file_list);
-    struct File_info *info = list_entry (e, struct File_info, elem);
-    file_close (info->file);
-    free (info);
-  }
-}
 
 /* function for freeing element in child list */
 static void

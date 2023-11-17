@@ -35,6 +35,25 @@ static void *check_validation (const void *);
 static void check_validation_rw (const void *, unsigned);
 static void check_validation_str (const char **vaddr);
 
+unsigned 
+file_hash_func(const struct hash_elem *element, void *aux UNUSED) 
+{
+  return(hash_int(GET_FILE(element)->fd));
+}
+
+bool 
+file_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
+{
+  return(GET_FILE(a)->fd < GET_FILE(b)->fd);
+}
+
+void free_struct_file (struct hash_elem *element, void *aux UNUSED)
+{
+  struct File_info *info = GET_FILE(element);
+  file_close (info->file);
+  free (info);
+}
+
 /* init the syscall */
 void
 syscall_init (void) {
@@ -181,7 +200,7 @@ syscall_open (const char *file) {
     }
     info->fd = thread_current ()->fd;
     info->file = f;
-    list_push_back (&thread_current ()->file_list, &info->elem);
+    hash_insert(&thread_current ()->file_table, &info->elem);
   }
   lock_release (&file_lock);
   return thread_current ()->fd++;
@@ -275,7 +294,7 @@ syscall_close (int fd) {
   struct File_info *info = get_file_info (fd);
   if (info) {
     file_close (info->file);
-    list_remove (&info->elem);
+    hash_delete (&thread_current()->file_table, &info->elem);
     free (info);
   }
   lock_release (&file_lock);
@@ -284,14 +303,11 @@ syscall_close (int fd) {
 /* get file info from fd */
 static struct File_info *
 get_file_info (int fd) {
-  struct list_elem *e;
-  for (e = list_begin (&thread_current ()->file_list);
-       e != list_end (&thread_current ()->file_list);
-       e = list_next (e)) {
-    struct File_info *info = list_entry (e, struct File_info, elem);
-    if (info->fd == fd) {
-      return info;
-    }
+  struct File_info key;
+  key.fd = fd; 
+  struct hash_elem *e = hash_find(&thread_current()->file_table, &key.elem);
+  if(e != NULL){
+     return GET_FILE(e);
   }
   /* If no file_info is found, return NULL */
   return NULL; 
