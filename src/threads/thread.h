@@ -107,6 +107,8 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                 /* Page directory. */
+    bool parent_status;                /* represent parent status*/
+    bool *child_status_pointer;        /* pointer to child status owned by parents*/
 
     struct list file_list;             /* List of files opened by the thread. */
     int fd;                            /* The file descriptor number. */
@@ -128,6 +130,8 @@ struct wait_thread_elem {
    int exit_code;                      /* exit code of child*/
    struct semaphore wait_sema;         /* origin 0 will be up when exit*/
    struct list_elem elem;              /* List element. */
+   bool child_status;                  /* represent child status*/
+   bool *parent_status_pointer;         /* pointer to parent status owned by children*/
 };
 #endif
 

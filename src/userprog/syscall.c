@@ -125,6 +125,9 @@ syscall_exit (int status) {
   if (file_lock.holder == cur) {
     lock_release (&file_lock);
   }
+  if(cur -> parent_status == false && cur -> child_status_pointer != NULL){
+    *(cur -> child_status_pointer) = true;
+  }
   *(cur->exit_code) = status;
   sema_up (cur->wait_sema);
   thread_exit ();

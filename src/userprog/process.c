@@ -650,10 +650,13 @@ free_file_list (struct list *file_list) {
 static void
 free_child_list (struct list *child_list) 
 {
-  struct list_elem *e;
+  struct wait_thread_elem *child_elem;
   while(!list_empty (child_list))
   {
-    e = list_pop_back (child_list);
-    free (list_entry (e, struct wait_thread_elem, elem));
+    child_elem = list_entry (list_pop_back (child_list), struct wait_thread_elem, elem);
+    if(child_elem -> child_status == false){
+      *(child_elem -> parent_status_pointer) = true;
+    }
+    free (child_elem);
   }
 }

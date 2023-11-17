@@ -203,6 +203,9 @@ thread_create (const char *name, int priority,
   }
   t->exit_code = &wait_elem->exit_code;
   t->wait_sema = &wait_elem->wait_sema;
+  wait_elem->child_status = false;
+  wait_elem->parent_status_pointer = &(t -> parent_status);
+  t->child_status_pointer = &(wait_elem -> child_status);
   sema_init (t->wait_sema, 0);
   wait_elem->tid = t -> tid;
   list_push_back (&thread_current ()->child_list, &wait_elem->elem);
@@ -501,6 +504,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 #ifdef USERPROG
   list_init (&t->child_list);
+  t->parent_status = false;
 #endif
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
