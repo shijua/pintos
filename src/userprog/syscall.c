@@ -31,7 +31,7 @@ static void syscall_close (int);
 static struct File_info *get_file_info (int fd);
 
 /* Three functions used for checking user memory access safety. */
-static void *check_validation (const void *);
+static void check_validation (const void *);
 static void check_validation_rw (const void *, unsigned);
 static void check_validation_str (const char **vaddr);
 
@@ -64,7 +64,8 @@ syscall_init (void) {
 static void
 syscall_handler (struct intr_frame *f UNUSED) {
   /* retrieve the system call number */
-  int syscall_num = *((int *) check_validation (f->esp));
+  check_validation (f->esp);
+  int syscall_num = *((int *) f->esp);
   switch (syscall_num) {
     case SYS_HALT:
       syscall_halt();
@@ -141,14 +142,15 @@ void
 syscall_exit (int status) {
   struct thread* cur = thread_current ();
   printf ("%s: exit(%d)\n", cur->name, status);
+  /* ensure the file lock has been released */
   if (file_lock.holder == cur) {
     lock_release (&file_lock);
   }
-  if(cur -> parent_status == false && cur -> child_status_pointer != NULL){
+  if (cur -> parent_status == false && cur -> child_status_pointer != NULL) {
     *(cur -> child_status_pointer) = true;
+    sema_up (cur->wait_sema);
   }
   *(cur->exit_code) = status;
-  sema_up (cur->wait_sema);
   thread_exit ();
   NOT_REACHED ();
 }
@@ -314,9 +316,9 @@ get_file_info (int fd) {
 }
 
 /* Function used for checking validation for the user virtual address is valid
-   and returns the kernel virtual address from the specific address given. If
+   and check kernel virtual address from the specific address given. If
    the address given is invalid, call syscall_exit to terminate the process. */
-static void *check_validation (const void *vaddr) {
+static void check_validation (const void *vaddr) {
   uint32_t *pd = thread_current ()->pagedir;
   if (vaddr == NULL || !is_user_vaddr (vaddr)) {
     syscall_exit (STATUS_FAIL);
@@ -324,12 +326,8 @@ static void *check_validation (const void *vaddr) {
     void *kernal_vaddr = pagedir_get_page (pd, vaddr);
     if (kernal_vaddr == NULL) {
       syscall_exit (STATUS_FAIL);
-    } else {
-      return kernal_vaddr;
-    }
+    } 
   }
-  NOT_REACHED ();
-  return NULL;
 }
 
 /* special case for string that need to check whether content is null */
@@ -349,6 +347,6 @@ static void check_validation_rw (const void *buffer, unsigned size) {
   for (; local < buffer_length; local++) {
     if (local < USER_BOTTOM || !is_user_vaddr ((const void *) local)) {
           syscall_exit (STATUS_FAIL);
-        }
+    }
   }
 }
