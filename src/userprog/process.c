@@ -24,6 +24,11 @@ static thread_func start_process NO_RETURN;
 static bool load (const char *, void (**eip) (void), void **);
 static void free_child_list (struct list *);
 
+struct arg_para{
+  char *cpointer;
+  char *fileName;
+};
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -32,26 +37,15 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
-  char *fn_copy1;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
-  fn_copy1 = palloc_get_page (0);
   if (fn_copy == NULL) {
-    if(fn_copy1 != NULL) {
-      palloc_free_page(fn_copy1);
-    }
-    return TID_ERROR;
-  }
-
-  if (fn_copy1 == NULL) {
-    palloc_free_page(fn_copy);
     return TID_ERROR;
   }
   strlcpy (fn_copy, file_name, PGSIZE);
-  strlcpy (fn_copy1, file_name, PGSIZE);
   
   /* get file name */
   char *cpointer = fn_copy;
@@ -65,20 +59,22 @@ process_execute (const char *file_name)
     token = strtok_r(cpointer, " ", &cpointer);
   }
 
+  struct arg_para create_para;
+  create_para.cpointer = cpointer;
+  create_para.fileName = fileName;
+
   /* Create a new thread to execute FILE_NAME. */
   lock_acquire (&child_lock);
   exists = true;
-  tid = thread_create (fileName, PRI_DEFAULT, start_process, fn_copy1);
+  tid = thread_create (fileName, PRI_DEFAULT, start_process, &create_para);
   /* if memory is full */
   if (tid == TID_ERROR) {
     palloc_free_page (fn_copy);
-    palloc_free_page (fn_copy1);
     lock_release (&child_lock);
     return TID_ERROR;
   }
   sema_down (&execute_sema);
   palloc_free_page (fn_copy);
-  palloc_free_page (fn_copy1);
   if (exists == false) {
     lock_release (&child_lock);
     return TID_ERROR;
@@ -90,23 +86,16 @@ process_execute (const char *file_name)
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *fn_copy)
+start_process (void *create_para)
 {
   /* initialize file list */
   struct thread* cur = thread_current();
   hash_init (&cur->file_table, file_hash_func, file_less_func, NULL);
 
   /* get file name */
-  char *file_name = NULL;
-  char *cpointer = fn_copy;
-  char *token = strtok_r (cpointer, " ", &cpointer);
-  while (token != NULL) {
-    if (strlen(token) > 0) {
-      file_name = token;
-      break;
-    }
-    token = strtok_r(cpointer, " ", &cpointer);
-  }
+  char *file_name = ((struct arg_para*)create_para) -> fileName;
+  char *cpointer = ((struct arg_para*)create_para) -> cpointer;
+  char *token = file_name;
 
   struct intr_frame if_;
   bool success;
