@@ -33,66 +33,53 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+  char *fn_copy1;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
+  fn_copy1 = palloc_get_page (0);
   if (fn_copy == NULL) {
+    if(fn_copy1 != NULL) {
+      palloc_free_page(fn_copy1);
+    }
+    return TID_ERROR;
+  }
+
+  if (fn_copy1 == NULL) {
+    palloc_free_page(fn_copy);
     return TID_ERROR;
   }
   strlcpy (fn_copy, file_name, PGSIZE);
-
-  /* Argument Passing. */
-  /* initialise a parameter list to store parameter */ 
-  struct list *parameter_list = malloc (sizeof (struct list));
-  if (parameter_list == NULL) {
-    palloc_free_page (fn_copy);
-    return TID_ERROR;
-  }
-  list_init (parameter_list);
+  strlcpy (fn_copy1, file_name, PGSIZE);
   
-  char *token;
   char *cpointer = fn_copy;
-  token = strtok_r (cpointer, " ", &cpointer);
-  int paraSize = 0;
+  char *token = strtok_r (cpointer, " ", &cpointer);
+  char *fileName = NULL;
   while (token != NULL) {
     if (strlen(token) > 0) {
-      /* use malloc, otherwise the variable get in the loop will be the same. */
-      struct parameter_value *para = malloc (sizeof (struct parameter_value));
-      if (para == NULL) {
-        palloc_free_page (fn_copy);
-        free_para_list (parameter_list);
-        return TID_ERROR;
-      }
-      para -> data = token;
-      paraSize += strlen (para -> data) + PTR_SIZE + STRING_BLANK;
-      list_push_front (parameter_list, &para->elem);
+      fileName = token;
+      break;
     }
     token = strtok_r(cpointer, " ", &cpointer);
   }
-  paraSize += STACK_BASE;
-  /* check if size exceeded */
-  if (paraSize > PGSIZE) {
-    palloc_free_page (fn_copy);
-    free_para_list (parameter_list);
-    return TID_ERROR;
-  }
-  char *fileName = GET_PARAMETER (list_back (parameter_list)) -> data;
 
   /* Create a new thread to execute FILE_NAME. */
   lock_acquire (&child_lock);
   exists = true;
-  tid = thread_create (fileName, PRI_DEFAULT, start_process, parameter_list);
+  tid = thread_create (fileName, PRI_DEFAULT, start_process, fn_copy1);
   /* if memory is full */
   if (tid == TID_ERROR) {
-    free_para_list (parameter_list);
+    // free_para_list (parameter_list);
     palloc_free_page (fn_copy);
+    palloc_free_page (fn_copy1);
     lock_release (&child_lock);
     return TID_ERROR;
   }
   sema_down (&execute_sema);
   palloc_free_page (fn_copy);
+  palloc_free_page (fn_copy1);
   if (exists == false) {
     lock_release (&child_lock);
     return TID_ERROR;
@@ -104,12 +91,23 @@ process_execute (const char *file_name)
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *parameter_list)
+start_process (void *fn_copy)
 {
   /* initialize file list */
-  hash_init (&thread_current()->file_table, file_hash_func, file_less_func, NULL);
+  struct thread* cur = thread_current();
+  hash_init (&cur->file_table, file_hash_func, file_less_func, NULL);
 
-  char *file_name = GET_PARAMETER (list_back (parameter_list)) -> data;
+  char *file_name = NULL;
+  char *cpointer = fn_copy;
+  char *token = strtok_r (cpointer, " ", &cpointer);
+  while (token != NULL) {
+    if (strlen(token) > 0) {
+      file_name = token;
+      break;
+    }
+    token = strtok_r(cpointer, " ", &cpointer);
+  }
+  // printf(file_name);
   struct intr_frame if_;
   bool success;
 
@@ -118,12 +116,12 @@ start_process (void *parameter_list)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+  ASSERT(file_name != NULL);
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   if (!success) {
     exists = false;
-    free_para_list (parameter_list);
     sema_up (&execute_sema);
     syscall_exit (STATUS_FAIL);
     NOT_REACHED ();
@@ -131,44 +129,53 @@ start_process (void *parameter_list)
 
   /* deny write when execute this file */
   struct file *executable_file = filesys_open (file_name);
-  thread_current ()->executable_file = executable_file;
+  cur->executable_file = executable_file;
   file_deny_write (executable_file);
-  sema_up (&execute_sema);
 
-  int * _esp = (int *)&if_.esp;
-  struct list_elem *e;
-  int index = 0;
-  char *para;
+  int *_esp = (int *)&if_.esp;
+  int *stack_bottom =((uint8_t *)if_.esp) - PGSIZE;
+  int *pstack = stack_bottom;
   int size = 0;
+  int paraSize =0;
+
   /* argv */
-  for (e = list_begin (parameter_list); e != list_end (parameter_list);
-       e = list_next (e)) {
-    para = GET_PARAMETER(e) -> data;
-    *_esp -= strlen (para) + 1;
-    index += strlen (para) + 1;
-    strlcpy((char *)if_.esp, para, strlen (para) + 1);
-    GET_PARAMETER(e) ->address = (unsigned)if_.esp;
-    size++;
+   while (token != NULL) {
+    if (strlen(token) > 0) {
+      *(pstack) = (int)token;
+      pstack++;
+      paraSize += strlen (token) + PTR_SIZE + STRING_BLANK;
+      size++;
+    }
+    token = strtok_r(cpointer, " ", &cpointer);
   }
+  paraSize += STACK_BASE;
+
+  if (paraSize > PGSIZE) {
+    exists = false;
+    sema_up (&execute_sema);
+    syscall_exit (STATUS_FAIL);
+    NOT_REACHED ();
+  }
+
+  for(int i = size - 1; i >= 0; i--){
+    *_esp -= strlen (stack_bottom[i]) + 1;
+    strlcpy((char *)if_.esp, stack_bottom[i], strlen (stack_bottom[i]) + 1);
+    stack_bottom[i] = if_.esp;
+  }
+
   /* word align */
-  int mod = index % 4 == 0 ? 0 : 4 - (index % 4);
+  int mod = 4 - (*_esp) % 4;
+  if(mod == 4) mod = 0;
   *_esp -= mod;
   memset((char *)if_.esp, 0, mod);
   /* argv[argc] */
-  index += mod;
   *_esp -= 4;
   memset((char *)if_.esp, 0, 4);
   /* argv[0] - argv[argc - 1] */
-  index += mod;
-  int add;
-  for (e = list_begin (parameter_list); e != list_end (parameter_list);
-       e = list_next (e)) {
-    add = GET_PARAMETER(e) -> address;
+  for(int i =  size - 1; i >= 0; i--){
     *_esp -= 4;
-    index += 4;
-    memcpy ((char *)if_.esp, &(add), 4);
+    memcpy ((char *)if_.esp, &(stack_bottom[i]), 4);
   }
-  free_para_list(parameter_list);
   /* argv */
   *_esp -= 4;
   int argv = (int)if_.esp + 4;
@@ -185,6 +192,7 @@ start_process (void *parameter_list)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+  sema_up (&execute_sema);
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
