@@ -73,6 +73,7 @@ process_execute (const char *file_name)
     token = strtok_r(cpointer, " ", &cpointer);
   }
   paraSize += STACK_BASE;
+  /* check if size exceeded */
   if (paraSize > PGSIZE) {
     palloc_free_page (fn_copy);
     free_para_list (parameter_list);
@@ -653,8 +654,9 @@ free_child_list (struct list *child_list)
   struct wait_thread_elem *child_elem;
   while(!list_empty (child_list))
   {
-    child_elem = list_entry (list_pop_back (child_list), struct wait_thread_elem, elem);
-    if(child_elem -> child_status == false){
+    child_elem = list_entry (list_pop_back (child_list), 
+                             struct wait_thread_elem, elem);
+    if (child_elem -> child_status == false) {
       *(child_elem -> parent_status_pointer) = true;
     }
     free (child_elem);
