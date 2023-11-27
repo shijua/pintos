@@ -91,6 +91,7 @@ start_process (void *create_para)
   /* initialize file list */
   struct thread* cur = thread_current();
   hash_init (&cur->file_table, file_hash_func, file_less_func, NULL);
+  hash_init (&cur->supplemental_page_table, file_hash_func, file_less_func, NULL);
 
   /* get file name */
   char *file_name = ((struct arg_para*)create_para) -> fileName;
