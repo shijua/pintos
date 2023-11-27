@@ -16,15 +16,14 @@ bool page_less_func (const struct hash_elem *a, const struct hash_elem *b, void 
 }
 
 bool
-pageTableAdding (const uint32_t kernel_address, const uint32_t page_address) {
+pageTableAdding (const uint32_t page_address) {
     page_elem adding = malloc(sizeof(struct page_elem));
-    if(adding == NULL || !frame_add(kernel_address, adding)) {
-        // Panic
+    if(adding == NULL) {
+        PANIC("malloc failed");
         return false;
     }
     adding->page_address = page_address;
     adding->pd           = thread_current()->pagedir;
-    adding->physical_address = kernel_address;
     adding->swaped = false;
     adding->swapped_id = -1;
     hash_insert(&thread_current()->supplemental_page_table, &adding->elem);
