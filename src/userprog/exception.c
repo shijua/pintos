@@ -7,6 +7,17 @@
 #include "userprog/syscall.h"
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
+#include "vm/pageTable.h"
+#include "threads/palloc.h"
+#include <string.h>
+#include "vm/frame.h"
+#include "vm/pageTable.h"
+#include "threads/thread.h"
+
+static bool load_page(struct file *file, off_t ofs, uint8_t *upage,
+          uint32_t page_read_bytes, uint32_t page_zero_bytes, bool writable);
+
+static bool install_page (void *upage, void *kpage, bool writable);
 
 // function used to check if pointer mapped to a unmapped memory
 static bool 
@@ -41,7 +52,7 @@ static void page_fault (struct intr_frame *);
    Refer to [IA32-v3a] section 5.15 "Exception and Interrupt
    Reference" for a description of each of these exceptions. */
 void
-exception_init (void) 
+exception_init (void)
 {
   /* These exceptions can be raised explicitly by a user program,
      e.g. via the INT, INT3, INTO, and BOUND instructions.  Thus,
@@ -147,6 +158,23 @@ page_fault (struct intr_frame *f)
      (#PF)". */
   asm ("movl %%cr2, %0" : "=r" (fault_addr));
 
+  struct page_elem *page = pageLookUp(fault_addr);
+
+
+  if(page != NULL) { // it is a fake page fault
+    switch (page->page_status) {
+      case IN_FRAME:
+        break;
+      case IN_SWAP:
+        break;
+      case IN_FILE:
+        struct lazy_file *file = page->lazy_file;
+        load_page(file->file, file->offset, page->page_address, file->read_bytes, file->zero_bytes, file->writable);
+        break;
+
+    }
+    return;
+  }
   /* Turn interrupts back on (they were only off so that we could
      be assured of reading CR2 before it changed). */
   intr_enable ();
@@ -174,3 +202,55 @@ page_fault (struct intr_frame *f)
   kill (f);
 }
 
+
+/* load single page */
+static bool
+load_page(struct file *file, off_t ofs, uint8_t *upage,
+          uint32_t page_read_bytes, uint32_t page_zero_bytes, bool writable) {
+
+  file_seek(file, ofs);
+  /* Check if virtual page already allocated */
+  struct thread *t = thread_current();
+  uint8_t *kpage = pagedir_get_page(t->pagedir, upage);
+
+  if (kpage == NULL) {
+
+    /* Get a new page of memory. */
+    kpage = palloc_get_page(PAL_USER);
+    if (kpage == NULL) {
+      return false;
+    }
+
+    /* Add the page to the process's address space. */
+    if (!install_page(upage, kpage, writable)) {
+      palloc_free_page(kpage);
+      return false;
+    }
+
+  } else {
+
+    /* Check if writable flag for the page should be updated */
+    if (writable && !pagedir_is_writable(t->pagedir, upage)) {
+      pagedir_set_writable(t->pagedir, upage, writable);
+    }
+
+  }
+
+  /* Load data into the page. */
+  if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes) {
+    return false;
+  }
+  memset(kpage + page_read_bytes, 0, page_zero_bytes);
+  return true;
+}
+
+static bool
+install_page (void *upage, void *kpage, bool writable)
+{
+  struct thread *t = thread_current ();
+
+  /* Verify that there's not already a page at that virtual
+     address, then map our page there. */
+  return (pagedir_get_page (t->pagedir, upage) == NULL
+          && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}

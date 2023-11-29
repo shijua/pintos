@@ -67,7 +67,7 @@ pageLookUp (const uint32_t page_address) {
     temp.page_address = page_address;
     struct hash_elem *find = hash_find(&thread_current()->supplemental_page_table, &temp.elem);
     if(find == NULL){
-        PANIC("page not existing");
+      return NULL; // which means this page is not in the supplemental page table, so it is not a valid page
     }
     return getPageElem(find);
 }
