@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
+#include "vm/pageTable.h"
 
 static bool exists; /* use for indicate whether executable file exists */
 static thread_func start_process NO_RETURN;
@@ -91,7 +92,7 @@ start_process (void *create_para)
   /* initialize file list */
   struct thread* cur = thread_current();
   hash_init (&cur->file_table, file_hash_func, file_less_func, NULL);
-  hash_init (&cur->supplemental_page_table, file_hash_func, file_less_func, NULL);
+  hash_init (&cur->supplemental_page_table, page_hash_func, page_less_func, NULL);
 
   /* get file name */
   char *file_name = ((struct arg_para*)create_para) -> file_name;
@@ -545,39 +546,55 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
-      /* Check if virtual page already allocated */
-      struct thread *t = thread_current ();
-      uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
-      
-      if (kpage == NULL){
-        
-        /* Get a new page of memory. */
-        kpage = palloc_get_page (PAL_USER);
-        if (kpage == NULL){
-          return false;
-        }
-        
-        /* Add the page to the process's address space. */
-        if (!install_page (upage, kpage, writable)) 
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }     
-        
-      } else {
-        
-        /* Check if writable flag for the page should be updated */
-        if(writable && !pagedir_is_writable(t->pagedir, upage)){
-          pagedir_set_writable(t->pagedir, upage, writable); 
-        }
-        
+      /* doing lazy load */
+      if (!pageTableAdding(upage, NULL, IN_FILE)) {
+        return false;
       }
+      struct page_elem *page = pageLookUp(upage);
+      page->page_status = IN_FILE;
 
-      /* Load data into the page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes){
-        return false; 
-      }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+      page->lazy_file->file = file;
+      page->lazy_file->offset = ofs;
+      page->lazy_file->read_bytes = page_read_bytes;
+      page->lazy_file->zero_bytes = page_zero_bytes;
+      page->lazy_file->writable = writable;
+      ofs += page_read_bytes;
+
+
+
+      /* Check if virtual page already allocated */
+      // struct thread *t = thread_current ();
+      // uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
+      
+      // if (kpage == NULL){
+        
+      //   /* Get a new page of memory. */
+      //   kpage = palloc_get_page (PAL_USER);
+      //   if (kpage == NULL){
+      //     return false;
+      //   }
+        
+      //   /* Add the page to the process's address space. */
+      //   if (!install_page (upage, kpage, writable)) 
+      //   {
+      //     palloc_free_page (kpage);
+      //     return false; 
+      //   }     
+        
+      // } else {
+        
+      //   /* Check if writable flag for the page should be updated */
+      //   if(writable && !pagedir_is_writable(t->pagedir, upage)){
+      //     pagedir_set_writable(t->pagedir, upage, writable); 
+      //   }
+        
+      // }
+
+      // /* Load data into the page. */
+      // if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes){
+      //   return false; 
+      // }
+      // memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -592,6 +609,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp) 
 {
+  // need to change
   uint8_t *kpage;
   bool success = false;
 

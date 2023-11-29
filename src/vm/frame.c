@@ -92,7 +92,7 @@ frame_swap () {
     frame_index_loop();
   }
   struct frame_elem *frame_elem = getFrameListElem(frame_pointer);
-  frame_elem->ppage->swaped = true;
+  frame_elem->ppage->page_status = IN_SWAP;
   frame_elem->ppage->swapped_id = swap_out(&frame_elem->frame_addr);
   return frame_elem->frame_addr;
 }
