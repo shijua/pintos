@@ -49,7 +49,7 @@ frame_add (uint32_t frame_addr, struct page_elem *page) {
   }
   adding->frame_addr = frame_addr;
   adding->ppage = page;
-  pagedir_set_accessed(getPd(frame_pointer), getFrameListElem(frame_pointer)->ppage->page_address, true);
+  // pagedir_set_accessed(getPd(frame_pointer), getFrameListElem(frame_po1inter)->ppage->page_address, true);
   hash_insert(&frame_hash, &adding->hash_e);
   list_insert(frame_pointer, &adding->list_e);
   // if the frame was empty before adding

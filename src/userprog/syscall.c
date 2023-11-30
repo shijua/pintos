@@ -149,8 +149,8 @@ syscall_exit (int status) {
   }
   if (cur -> parent_status == false && cur -> child_status_pointer != NULL) {
     *(cur -> child_status_pointer) = true;
-    sema_up (cur->wait_sema);
     *(cur->exit_code) = status;
+    sema_up (cur->wait_sema);
   }
   thread_exit ();
   NOT_REACHED ();

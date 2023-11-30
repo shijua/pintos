@@ -119,9 +119,11 @@ start_process (void *create_para)
   }
 
   /* deny write when execute this file */
+  lock_acquire (&file_lock);
   struct file *executable_file = filesys_open (file_name);
   cur->executable_file = executable_file;
   file_deny_write (executable_file);
+  lock_release (&file_lock);
 
   /* address we stored is 32 bit */
   uint8_t **_esp = (uint8_t **) &if_.esp;
@@ -547,17 +549,25 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
       /* doing lazy load */
-      if (!pageTableAdding(upage, NULL, IN_FILE)) {
-        return false;
+      if (pageLookUp(upage) == NULL) {
+        pageTableAdding(upage, NULL, IN_FILE);
       }
+
+      /* clear its own pagedir if it have so it will falls into page fault*/
+      if (pagedir_get_page (thread_current ()->pagedir, upage) != NULL) {
+        pagedir_clear_page (thread_current ()->pagedir, upage);
+      }
+
       struct page_elem *page = pageLookUp(upage);
       page->page_status = IN_FILE;
 
+      page->lazy_file = malloc (sizeof (struct lazy_file));
       page->lazy_file->file = file;
       page->lazy_file->offset = ofs;
       page->lazy_file->read_bytes = page_read_bytes;
       page->lazy_file->zero_bytes = page_zero_bytes;
       page->lazy_file->writable = writable;
+      page->swapped_id = -1;
       ofs += page_read_bytes;
 
 
@@ -616,11 +626,14 @@ setup_stack (void **esp)
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
     {
+      pageTableAdding(((uint8_t *) PHYS_BASE) - PGSIZE, kpage, IN_FRAME);
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
-      else
+      else {
         palloc_free_page (kpage);
+        // TODO page need to be free if not successfull
+      }
     }
   return success;
 }
@@ -649,6 +662,7 @@ install_page (void *upage, void *kpage, bool writable)
 static void
 free_child_list (struct list *child_list) 
 {
+  lock_acquire (&child_lock);
   struct wait_thread_elem *child_elem;
   while(!list_empty (child_list))
   {
@@ -659,4 +673,5 @@ free_child_list (struct list *child_list)
     }
     free (child_elem);
   }
+  lock_release (&child_lock);
 }
