@@ -32,18 +32,11 @@ pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enu
 }
 
 void
-pageFree (const uint32_t page_address) {
-    struct page_elem temp;
-    temp.page_address = page_address;
-    struct hash_elem *find = hash_find(&thread_current()->supplemental_page_table, &temp.elem);
-    if(find == NULL){
-        PANIC("page not existing");
-    }
-    page_elem removing = getPageElem(find);
+page_free_action (struct hash_elem *element, void *aux) {
+    page_elem removing = getPageElem(element);
     // TODO this page may not be in the frame
     // either free the item in frame or in swap
     frame_free(removing->kernel_address);
-    hash_delete(&thread_current()->supplemental_page_table, &removing->elem);
     free(removing);
 }
 

@@ -80,6 +80,18 @@ frame_free (uint32_t kernel_addr){
   return true;
 }
 
+void
+frame_free_action (struct hash_elem *element, void *aux){
+  //////////// synchronize!!
+  struct frame_elem *removing = getFrameHashElem(element);
+  list_remove(&removing->list_e);
+  if(frame_pointer == &removing->list_e){
+    frame_index_loop();
+  }
+  free(removing);
+}
+
+
 uint32_t
 frame_swap () {
   //////////// synchronize!!

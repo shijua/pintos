@@ -40,7 +40,7 @@ typedef struct page_elem {
 } *page_elem;
 
 bool pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enum status status);
-void pageFree (const uint32_t page_address);
+hash_action_func page_free_action;
 void swapBackPage (const uint32_t page_address);
 page_elem pageLookUp (const uint32_t page_address);
 
