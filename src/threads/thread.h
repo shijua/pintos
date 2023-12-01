@@ -105,6 +105,8 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     struct hash supplemental_page_table;
+    int stack_size;                     /* the size of stack */
+    void *esp;                          /* the esp of thread store it handle case in task 3 stack growth */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

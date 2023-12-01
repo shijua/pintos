@@ -19,8 +19,11 @@ static bool load_page(struct file *file, off_t ofs, uint8_t *upage,
 
 static bool install_page (void *upage, void *kpage, bool writable);
 
+static bool is_stack_address (void *fault_addr, void *esp);
+static bool grow_stack (void *fault_addr);
+
 // function used to check if pointer mapped to a unmapped memory
-static bool 
+static bool
 is_valid_ptr(const void *user_ptr)
 {
   struct thread *curr = thread_current ();
@@ -84,14 +87,14 @@ exception_init (void)
 
 /* Prints exception statistics. */
 void
-exception_print_stats (void) 
+exception_print_stats (void)
 {
   printf ("Exception: %lld page faults\n", page_fault_cnt);
 }
 
 /* Handler for an exception (probably) caused by a user process. */
 static void
-kill (struct intr_frame *f) 
+kill (struct intr_frame *f)
 {
   /* This interrupt is one (probably) caused by a user process.
      For example, the process might have tried to access unmapped
@@ -100,7 +103,7 @@ kill (struct intr_frame *f)
      the kernel.  Real Unix-like operating systems pass most
      exceptions back to the process via signals, but we don't
      implement them. */
-     
+
   /* The interrupt frame's code segment value tells us where the
      exception originated. */
   switch (f->cs)
@@ -111,7 +114,7 @@ kill (struct intr_frame *f)
       printf ("%s: dying due to interrupt %#04x (%s).\n",
               thread_name (), f->vec_no, intr_name (f->vec_no));
       intr_dump_frame (f);
-      thread_exit (); 
+      thread_exit ();
 
     case SEL_KCSEG:
       /* Kernel's code segment, which indicates a kernel bug.
@@ -119,10 +122,10 @@ kill (struct intr_frame *f)
          may cause kernel exceptions--but they shouldn't arrive
          here.)  Panic the kernel to make the point.  */
       intr_dump_frame (f);
-      PANIC ("Kernel bug - unexpected interrupt in kernel"); 
+      PANIC ("Kernel bug - unexpected interrupt in kernel");
 
     default:
-      /* Some other code segment?  
+      /* Some other code segment?
          Shouldn't happen.  Panic the kernel. */
       printf ("Interrupt %#04x (%s) in unknown segment %04x\n",
              f->vec_no, intr_name (f->vec_no), f->cs);
@@ -142,7 +145,7 @@ kill (struct intr_frame *f)
    description of "Interrupt 14--Page Fault Exception (#PF)" in
    [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 static void
-page_fault (struct intr_frame *f) 
+page_fault (struct intr_frame *f)
 {
   bool not_present;  /* True: not-present page, false: writing r/o page. */
   bool write;        /* True: access was write, false: access was read. */
@@ -161,8 +164,20 @@ page_fault (struct intr_frame *f)
   /* Turn interrupts back on (they were only off so that we could
      be assured of reading CR2 before it changed). */
   intr_enable ();
-struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
+  struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
 
+  /* check if it is a stack access */
+  uint32_t esp = f->esp;
+  if(page == NULL && is_stack_address(fault_addr, esp)) {
+    printf("fault address: %p\n", fault_addr);
+    printf("esp: %p\n", esp);
+    printf("\n")
+    /* grow the stack */
+    if(!grow_stack(fault_addr)) {
+      syscall_exit(STATUS_FAIL);
+    }
+    return;
+  }
 
   if(page != NULL) { // it is a fake page fault
     switch (page->page_status) {
@@ -210,7 +225,41 @@ struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
           user ? "user" : "kernel");
   kill (f);
 }
+/* check it is a stack access, we need to grow the stack */
+static bool
+is_stack_address (void *fault_addr, void *esp){
+  struct thread *curr = thread_current ();
+  if (esp - PUSH_A_SIZE == fault_addr || esp - PUSH_SIZE == fault_addr || esp == fault_addr) {
+    /* check it exceed the stack size */
+    if (curr -> stack_size >= PGSIZE * 2 * 1024) { //TODO: magic number
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
 
+/* grow the stack */
+static bool
+grow_stack (void *fault_addr) {
+  struct thread *curr = thread_current ();
+
+  /* allocate a new page */
+  uint8_t *kpage = palloc_get_page (PAL_USER);
+  if (kpage == NULL) {
+    return false;
+  }
+  /* add the page to the process's address space */
+  if (!install_page (pg_round_down (fault_addr), kpage, true)) {
+    palloc_free_page (kpage);
+    return false;
+  }
+  /* add the page to the supplemental page table */
+  pageTableAdding(pg_round_down (fault_addr), kpage, IN_FRAME);
+  /* update the stack size */
+  curr->stack_size += PGSIZE;
+  return true;
+}
 
 /* load single page */
 static bool
@@ -228,27 +277,27 @@ load_page(struct file *file, off_t ofs, uint8_t *upage,
    free (page->lazy_file);
 
    if (kpage == NULL) {
-        
+
         /* Get a new page of memory. */
         kpage = palloc_get_page (PAL_USER);
         if (kpage == NULL){
          free (page->lazy_file);
           return false;
         }
-        
+
         /* Add the page to the process's address space. */
-        if (!install_page (upage, kpage, writable)) 
+        if (!install_page (upage, kpage, writable))
         {
           palloc_free_page (kpage);
           free (page->lazy_file);
-          return false; 
-        }  
+          return false;
+        }
          page->kernel_address = kpage;
-        
+
       } else {
         /* Check if writable flag for the page should be updated */
         if(writable && !pagedir_is_writable(t->pagedir, upage)) {
-          pagedir_set_writable(t->pagedir, upage, writable); 
+          pagedir_set_writable(t->pagedir, upage, writable);
         }
    }
   /* Load data into the page. */

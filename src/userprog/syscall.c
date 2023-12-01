@@ -64,6 +64,8 @@ syscall_init (void) {
 /* direct to related system call according to system call number */
 static void
 syscall_handler (struct intr_frame *f UNUSED) {
+  /* store esp to the current thread */
+  thread_current ()->esp = f->esp;
   /* retrieve the system call number */
   check_validation (f->esp);
   int syscall_num = *((int *) f->esp);
