@@ -115,7 +115,7 @@ pagedir_set_page (uint32_t *pd, void *upage, void *kpage, bool writable)
       ASSERT ((*pte & PTE_P) == 0);
       *pte = pte_create_user (kpage, writable);
       /* add element to our own page table */
-      // frame_add((uint32_t) kpage, pageLookUp((uint32_t) upage));
+      frame_add((uint32_t) kpage, pageLookUp((uint32_t) upage));
       return true;
     }
   else
