@@ -18,7 +18,7 @@ struct frame_elem{
 };
 
 void frame_init();
-bool frame_add (uint32_t, struct page_elem *);
+void frame_add (uint32_t, struct page_elem *);
 bool frame_free (uint32_t);
 hash_action_func frame_free_action;
 uint32_t frame_swap ();

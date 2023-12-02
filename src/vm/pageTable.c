@@ -14,13 +14,12 @@ bool page_less_func (const struct hash_elem *a, const struct hash_elem *b, void 
   return getPageElem(a)->page_address <  getPageElem(b)->page_address ;
 }
 
-bool
-pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enum status status) {
+// TODO: this function change to void
+void pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enum status status) {
     // ASSERT (pageLookUp(page_address) == NULL); // make sure this page is not in the supplemental page table
     page_elem adding = malloc(sizeof(struct page_elem));
     if(adding == NULL) {
         PANIC("malloc failed");
-        return false;
     }
     adding->page_address = page_address;
     adding->pd           = thread_current()->pagedir;
@@ -28,7 +27,6 @@ pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enu
     adding->page_status = status;
     adding->swapped_id = -1;
     hash_insert(&thread_current()->supplemental_page_table, &adding->elem);
-    return true;
 }
 
 void

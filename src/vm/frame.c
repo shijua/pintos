@@ -1,4 +1,4 @@
-
+#include "threads/thread.h"
 #include "threads/synch.h"
 #include "frame.h"
 #include "devices/swap.h"
@@ -38,25 +38,24 @@ frame_index_loop() {
   frame_pointer = frame_pointer -> next;
 }
 
-bool
-frame_add (uint32_t frame_addr, struct page_elem *page) {
+// this function change to void
+void frame_add (uint32_t frame_addr, struct page_elem *page) {
   lock_acquire(&frame_lock);
   struct frame_elem *adding = malloc(sizeof(struct frame_elem));
   if(adding == NULL) {
-    lock_release(&frame_lock);
-    return false;
+    PANIC("frame_add: malloc failed");
   }
   adding->frame_addr = frame_addr;
   adding->ppage = page;
-  // pagedir_set_accessed(getPd(frame_pointer), getFrameListElem(frame_po1inter)->ppage->page_address, true);
   hash_insert(&frame_hash, &adding->hash_e);
   list_insert(frame_pointer, &adding->list_e);
   // if the frame was empty before adding
   if(frame_pointer == list_tail(&frame_list)){
     frame_pointer = list_front(&frame_list);
   }
+
+  pagedir_set_accessed(thread_current()->pagedir, adding->ppage->page_address, true);
   lock_release(&frame_lock);
-  return true;
 }
 
 bool
