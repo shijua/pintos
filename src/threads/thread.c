@@ -15,6 +15,10 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+#ifdef VM
+#include "vm/pageTable.h"
+#include "vm/frame.h"
+#endif
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -98,6 +102,7 @@ thread_init (void)
   lock_init (&child_lock);
   sema_init (&execute_sema, 0);
   lock_init (&file_lock);
+  lock_init (&page_lock);
 #endif
 
   /* Set up a thread structure for the running thread. */

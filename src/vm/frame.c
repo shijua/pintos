@@ -38,7 +38,6 @@ frame_index_loop() {
   frame_pointer = frame_pointer -> next;
 }
 
-// this function change to void
 void frame_add (uint32_t frame_addr, struct page_elem *page) {
   lock_acquire(&frame_lock);
   struct frame_elem *adding = malloc(sizeof(struct frame_elem));
@@ -54,10 +53,26 @@ void frame_add (uint32_t frame_addr, struct page_elem *page) {
     frame_pointer = list_front(&frame_list);
   }
 
-  pagedir_set_accessed(thread_current()->pagedir, adding->ppage->page_address, true);
+  pagedir_set_accessed(adding->ppage->pd, adding->ppage->page_address, true);
   lock_release(&frame_lock);
 }
 
+void frame_set_page (uint32_t kernel_addr, struct page_elem *page) {
+  lock_acquire(&frame_lock);
+  struct frame_elem temp;
+  temp.frame_addr = kernel_addr;
+  struct hash_elem *hashElem = hash_find(&frame_hash, &temp.hash_e);
+  if(hashElem == NULL) {
+    PANIC("frame_set_page: frame not found");
+  }
+  struct frame_elem *frame_elem = getFrameHashElem(hashElem);
+  pagedir_set_accessed(frame_elem->ppage->pd, frame_elem->ppage->page_address, true);
+  frame_elem->ppage = page;
+  lock_release(&frame_lock);
+}
+
+
+// change to void
 bool
 frame_free (uint32_t kernel_addr){
   lock_acquire(&frame_lock);
@@ -109,6 +124,9 @@ frame_swap () {
   struct frame_elem *frame_elem = getFrameListElem(frame_pointer);
   frame_elem->ppage->page_status = IN_SWAP;
   frame_elem->ppage->swapped_id = swap_out(&frame_elem->frame_addr);
+  frame_elem->ppage->writable = pagedir_is_writable(getPd(frame_pointer), getFrameListElem(frame_pointer)->ppage->page_address);
+  pagedir_clear_page (frame_elem->ppage->pd, frame_elem->ppage->page_address);
+  frame_index_loop();
   lock_release(&frame_lock);
   return frame_elem->frame_addr;
 }

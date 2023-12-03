@@ -167,8 +167,14 @@ struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
   if(page != NULL) { // it is a fake page fault
     switch (page->page_status) {
       case IN_FRAME:
+        PANIC ("page fault on a page in frame");
         break;
       case IN_SWAP:
+        void *kpage = swapBackPage(page->page_address);
+        if (!install_page(page->page_address, kpage, page->writable)) {
+          syscall_exit(STATUS_FAIL);
+        }
+        frame_set_page(kpage, page);
         break;
       case IN_FILE:
         struct lazy_file *file = page->lazy_file;
@@ -178,13 +184,12 @@ struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
             lock_release (&file_lock);
             is_locked = true;
          }
-        load_page(file->file, file->offset, page->page_address, file->read_bytes, file->zero_bytes, file->writable);
+        load_page(file->file, file->offset, page->page_address, file->read_bytes, file->zero_bytes, page->writable);
         // lock back when finish loading
          if (is_locked) {
             lock_acquire (&file_lock);
          }
         break;
-
     }
     return;
   }
@@ -231,11 +236,8 @@ load_page(struct file *file, off_t ofs, uint8_t *upage,
         
         /* Get a new page of memory. */
         kpage = palloc_get_page (PAL_USER);
-        if (kpage == NULL){
-         free (page->lazy_file);
-          return false;
-        }
-        
+        ASSERT (kpage != NULL);
+
         /* Add the page to the process's address space. */
         if (!install_page (upage, kpage, writable)) 
         {

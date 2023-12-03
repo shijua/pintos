@@ -31,6 +31,8 @@ typedef int tid_t;
 struct lock file_lock;
 /* lock used for TODO*/
 struct lock child_lock;
+// TODO temp version for lock
+struct lock page_lock;
 /* lock used for ensure check whether process 
    is created successfully before return tid */
 struct semaphore execute_sema;

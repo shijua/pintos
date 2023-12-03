@@ -23,7 +23,6 @@ struct lazy_file {
    off_t offset;
    size_t read_bytes;
    size_t zero_bytes;
-   bool writable;
 };
 
 
@@ -37,11 +36,12 @@ typedef struct page_elem {
    uint32_t kernel_address;
    size_t swapped_id;
    // }
+   bool writable;
 } *page_elem;
 
 void pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enum status status);
 hash_action_func page_free_action;
-void swapBackPage (const uint32_t page_address);
+void *swapBackPage (const uint32_t page_address);
 page_elem pageLookUp (const uint32_t page_address);
 
 #endif

@@ -6,17 +6,18 @@
 #include "threads/palloc.h"
 #include <debug.h>
 
-unsigned page_hash_func (const struct hash_elem *element, void *aux) {
+unsigned page_hash_func (const struct hash_elem *element, void *aux UNUSED) {
   return getPageElem(element)->page_address;
 }
 
-bool page_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux) {
+bool page_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED) {
   return getPageElem(a)->page_address <  getPageElem(b)->page_address ;
 }
 
 // TODO: this function change to void
 void pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enum status status) {
-    // ASSERT (pageLookUp(page_address) == NULL); // make sure this page is not in the supplemental page table
+    lock_acquire(&page_lock);
+    ASSERT (pageLookUp(page_address) == NULL); // make sure this page is not in the supplemental page table
     page_elem adding = malloc(sizeof(struct page_elem));
     if(adding == NULL) {
         PANIC("malloc failed");
@@ -27,41 +28,65 @@ void pageTableAdding (const uint32_t page_address, const uint32_t kernel_address
     adding->page_status = status;
     adding->swapped_id = -1;
     hash_insert(&thread_current()->supplemental_page_table, &adding->elem);
+    lock_release(&page_lock);
 }
 
 void
-page_free_action (struct hash_elem *element, void *aux) {
+page_free_action (struct hash_elem *element, void *aux UNUSED) {
+    lock_acquire(&page_lock);
     page_elem removing = getPageElem(element);
-    // TODO this page may not be in the frame
-    // either free the item in frame or in swap
-    frame_free(removing->kernel_address);
+    ASSERT (removing != NULL);
+    switch (removing->page_status) {
+      case IN_FRAME:
+          frame_free (removing->kernel_address);
+          break;
+      case IN_SWAP:
+          swap_drop (removing->swapped_id);
+          break;
+      case IN_FILE:
+          free (removing->lazy_file);
+          break;
+    }
     free(removing);
+    lock_release(&page_lock);
 }
 
-void
+void *
 swapBackPage (const uint32_t page_address) {
+    lock_acquire(&page_lock);
     struct page_elem temp;
     temp.page_address = page_address;
     struct hash_elem *find = hash_find(&thread_current()->supplemental_page_table, &temp.elem);
-    if(find == NULL){
+    if(find == NULL) {
         PANIC("page not existing");
     }
     page_elem elem = getPageElem(find);
     ASSERT(elem->page_status == IN_SWAP);
-    uint32_t kernel_address = palloc_get_page(PAL_USER);
-    swap_in(kernel_address, elem->swapped_id);
+    void* kernel_address = palloc_get_page(PAL_USER);
+    swap_in((void *) kernel_address, elem->swapped_id);
+    elem->kernel_address = kernel_address;
     elem->page_status = IN_FRAME;
+    lock_release(&page_lock);
+    return kernel_address;
 }
 
 
 page_elem
 pageLookUp (const uint32_t page_address) {
+    bool is_locked = false;
+    if (!lock_held_by_current_thread(&page_lock)) {
+        lock_acquire(&page_lock);
+        is_locked = true;
+    }
+    // lock_acquire(&page_lock);
     struct page_elem temp;
     temp.page_address = page_address;
     struct hash_elem *find = hash_find(&thread_current()->supplemental_page_table, &temp.elem);
-    if(find == NULL){
+    if(find == NULL) {
+      if (is_locked) lock_release(&page_lock);
       return NULL; // which means this page is not in the supplemental page table, so it is not a valid page
     }
+    if (is_locked) lock_release(&page_lock);
     return getPageElem(find);
 }
 

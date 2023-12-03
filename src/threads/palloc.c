@@ -112,7 +112,14 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
 void *
 palloc_get_page (enum palloc_flags flags) 
 {
-  return palloc_get_multiple (flags, 1);
+  void *page = palloc_get_multiple (flags, 1);
+  if (page == NULL && (flags & PAL_USER)) {
+    /* return the adress swap out */
+    void *swap_page = frame_swap();
+    ASSERT (swap_page != NULL);
+    return swap_page;
+  }
+  return page;
 }
 
 /* Frees the PAGE_CNT pages starting at PAGES. */
