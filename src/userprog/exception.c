@@ -162,12 +162,14 @@ page_fault (struct intr_frame *f)
   /* Turn interrupts back on (they were only off so that we could
      be assured of reading CR2 before it changed). */
   intr_enable ();
+lock_acquire (&thread_current()->page_lock);
 struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
 
 
   if(page != NULL) { // it is a fake page fault
     switch (page->page_status) {
       case IN_FRAME:
+        lock_release (&thread_current()->page_lock);
         syscall_exit(STATUS_FAIL);
         break;
       case IN_SWAP:
@@ -176,6 +178,7 @@ struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
           syscall_exit(STATUS_FAIL);
         }
         pagedir_set_dirty(thread_current()->pagedir, page->page_address, page->dirty);
+        lock_release (&thread_current()->page_lock);
         break;
       case IN_FILE:
         struct lazy_file *file = page->lazy_file;
@@ -190,10 +193,12 @@ struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
          if (is_locked) {
             lock_acquire (&file_lock);
          }
+         lock_release (&thread_current()->page_lock);
         break;
     }
     return;
   }
+lock_release (&thread_current()->page_lock);
   /* Count page faults. */
   page_fault_cnt++;
 

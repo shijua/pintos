@@ -249,7 +249,9 @@ process_exit (void)
   }
   hash_destroy (&cur -> file_table, free_struct_file);
   lock_release (&file_lock);
+  lock_acquire (&cur->page_lock);
   hash_destroy (&cur -> supplemental_page_table, page_free_action);
+  lock_release (&cur->page_lock);
   hash_destroy(&cur -> mmap_hash, free_struct_mmap);
   free_child_list (&thread_current() -> child_list);
 
@@ -377,7 +379,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
+  lock_acquire (&file_lock);
   file = filesys_open (file_name);
+  lock_release (&file_lock);
   if (file == NULL)
     {
       printf ("load: %s: open failed\n", file_name);
@@ -551,6 +555,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
+      lock_acquire (&thread_current() -> page_lock);
       /* doing lazy load */
       if (pageLookUp(upage) == NULL) {
         pageTableAdding(upage, NULL, IN_FILE);
@@ -572,43 +577,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       page->writable = writable;
       page->swapped_id = -1;
       ofs += page_read_bytes;
-
-
-
-      /* Check if virtual page already allocated */
-      // struct thread *t = thread_current ();
-      // uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
-      
-      // if (kpage == NULL){
-        
-      //   /* Get a new page of memory. */
-      //   kpage = palloc_get_page (PAL_USER);
-      //   if (kpage == NULL){
-      //     return false;
-      //   }
-        
-      //   /* Add the page to the process's address space. */
-      //   if (!install_page (upage, kpage, writable)) 
-      //   {
-      //     palloc_free_page (kpage);
-      //     return false; 
-      //   }     
-        
-      // } else {
-        
-      //   /* Check if writable flag for the page should be updated */
-      //   if(writable && !pagedir_is_writable(t->pagedir, upage)){
-      //     pagedir_set_writable(t->pagedir, upage, writable); 
-      //   }
-        
-      // }
-
-      // /* Load data into the page. */
-      // if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes){
-      //   return false; 
-      // }
-      // memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
+      lock_release (&thread_current() -> page_lock);
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
@@ -629,10 +598,12 @@ load_mmap(struct File_info *file_info, uint8_t *upage, struct mmapElem *mmapElem
     {
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
-      
+
+      lock_acquire (&thread_current() -> page_lock);
       if (pageLookUp(upage) != NULL) {
         return false;
       }
+      lock_release (&thread_current() -> page_lock);
 
       ofs += page_read_bytes;
       read_bytes -= page_read_bytes;
@@ -654,14 +625,18 @@ setup_stack (void **esp)
   bool success = false;
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  lock_acquire (&thread_current() -> page_lock);
   pageTableAdding (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, IN_FRAME);
   success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
   if (success) {
     *esp = PHYS_BASE;
   } else {
     palloc_free_page (kpage);
+    PANIC ("setup stack failed: may not happen");
     // TODO page need to be free if not successful
+
   }
+  lock_release (&thread_current() -> page_lock);
   return success;
 }
 

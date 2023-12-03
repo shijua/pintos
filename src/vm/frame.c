@@ -120,6 +120,11 @@ frame_swap () {
     frame_index_loop();
   }
   struct frame_elem *frame_elem = getFrameListElem(frame_pointer);
+  // bool locked_by_own = false;
+  // if (!lock_held_by_current_thread(&frame_elem->ppage->lock) && frame_elem->ppage != NULL) {
+  //     lock_acquire(&frame_elem->ppage->lock);
+  //     locked_by_own = true;
+  // }
   frame_elem->ppage->page_status = IN_SWAP;
   frame_elem->ppage->swapped_id = swap_out((void *) frame_elem->frame_addr);
   frame_elem->ppage->writable = pagedir_is_writable(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address);
@@ -127,6 +132,9 @@ frame_swap () {
   /* page need be reallocate later as kernel may request and will not add to the frame */
   palloc_free_page((void *) frame_elem->frame_addr);
   pagedir_clear_page (frame_elem->ppage->pd, (void *) frame_elem->ppage->page_address);
+  // if (locked_by_own) {
+  //   lock_release(&frame_elem->ppage->lock);
+  // }
   frame_free(frame_elem->frame_addr);
   frame_index_loop();
   lock_release(&frame_lock);

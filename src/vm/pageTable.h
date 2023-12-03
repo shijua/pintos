@@ -6,6 +6,7 @@
 #include "lib/kernel/bitmap.h"
 #include "filesys/off_t.h"
 #include <stdint.h>
+#include "threads/synch.h"
 
 #define getPageElem(ELEM) hash_entry (ELEM, struct page_elem, elem)
 
@@ -38,6 +39,7 @@ typedef struct page_elem {
    // }
    bool writable;
    bool dirty;
+   struct lock lock;
 } *page_elem;
 
 void pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enum status status);
