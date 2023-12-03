@@ -102,6 +102,7 @@ thread_init (void)
   lock_init (&child_lock);
   sema_init (&execute_sema, 0);
   lock_init (&file_lock);
+  lock_init(&frame_lock);
 #endif
 
   /* Set up a thread structure for the running thread. */

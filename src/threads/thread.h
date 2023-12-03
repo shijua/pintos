@@ -29,8 +29,10 @@ typedef int tid_t;
 #ifdef USERPROG
 /* set a global lock for file system */
 struct lock file_lock;
-/* lock used for TODO*/
+/* lock used for deletion and generation of child*/
 struct lock child_lock;
+/* lock use for frame */
+struct lock frame_lock;
 /* lock used for ensure check whether process 
    is created successfully before return tid */
 struct semaphore execute_sema;
