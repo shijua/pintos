@@ -176,8 +176,6 @@ struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
           syscall_exit(STATUS_FAIL);
         }
         pagedir_set_dirty(thread_current()->pagedir, page->page_address, page->dirty);
-        // frame_set_page(kpage, page);
-        // frame_add(kpage, page);
         break;
       case IN_FILE:
         struct lazy_file *file = page->lazy_file;

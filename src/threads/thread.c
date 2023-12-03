@@ -102,7 +102,6 @@ thread_init (void)
   lock_init (&child_lock);
   sema_init (&execute_sema, 0);
   lock_init (&file_lock);
-  lock_init (&page_lock);
 #endif
 
   /* Set up a thread structure for the running thread. */
@@ -513,6 +512,7 @@ init_thread (struct thread *t, const char *name, int priority)
 #ifdef USERPROG
   list_init (&t->child_list);
   t->parent_status = false;
+  lock_init (&t->page_lock);
 #endif
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
