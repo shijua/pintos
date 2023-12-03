@@ -104,7 +104,8 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    struct hash supplemental_page_table;
+    struct hash supplemental_page_table; /* supplemental page table */
+    struct lock page_lock;             /* lock for page table */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

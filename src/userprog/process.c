@@ -249,6 +249,7 @@ process_exit (void)
   }
   hash_destroy (&cur -> file_table, free_struct_file);
   lock_release (&file_lock);
+  hash_destroy (&cur -> supplemental_page_table, page_free_action);
   hash_destroy(&cur -> mmap_hash, free_struct_mmap);
   free_child_list (&thread_current() -> child_list);
 
@@ -568,7 +569,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       page->lazy_file->offset = ofs;
       page->lazy_file->read_bytes = page_read_bytes;
       page->lazy_file->zero_bytes = page_zero_bytes;
-      page->lazy_file->writable = writable;
+      page->writable = writable;
       page->swapped_id = -1;
       ofs += page_read_bytes;
 
@@ -653,17 +654,14 @@ setup_stack (void **esp)
   bool success = false;
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-  if (kpage != NULL) 
-    {
-      pageTableAdding(((uint8_t *) PHYS_BASE) - PGSIZE, kpage, IN_FRAME);
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
-        *esp = PHYS_BASE;
-      else {
-        palloc_free_page (kpage);
-        // TODO page need to be free if not successfull
-      }
-    }
+  pageTableAdding (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, IN_FRAME);
+  success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+  if (success) {
+    *esp = PHYS_BASE;
+  } else {
+    palloc_free_page (kpage);
+    // TODO page need to be free if not successful
+  }
   return success;
 }
 
