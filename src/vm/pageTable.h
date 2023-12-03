@@ -37,6 +37,7 @@ typedef struct page_elem {
    size_t swapped_id;
    // }
    bool writable;
+   bool dirty;
 } *page_elem;
 
 void pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enum status status);

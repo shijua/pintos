@@ -4,6 +4,7 @@
 #include "devices/swap.h"
 #include "threads/malloc.h"
 #include "userprog/pagedir.h"
+#include "threads/palloc.h"
 static struct list frame_list;
 static struct hash frame_hash;
 static struct lock frame_lock;
@@ -53,7 +54,7 @@ void frame_add (uint32_t frame_addr, struct page_elem *page) {
     frame_pointer = list_front(&frame_list);
   }
 
-  pagedir_set_accessed(adding->ppage->pd, adding->ppage->page_address, true);
+  pagedir_set_accessed(adding->ppage->pd, (void *) adding->ppage->page_address, true);
   lock_release(&frame_lock);
 }
 
@@ -66,7 +67,7 @@ void frame_set_page (uint32_t kernel_addr, struct page_elem *page) {
     PANIC("frame_set_page: frame not found");
   }
   struct frame_elem *frame_elem = getFrameHashElem(hashElem);
-  pagedir_set_accessed(frame_elem->ppage->pd, frame_elem->ppage->page_address, true);
+  pagedir_set_accessed(frame_elem->ppage->pd, (void *) frame_elem->ppage->page_address, true);
   frame_elem->ppage = page;
   lock_release(&frame_lock);
 }
@@ -74,30 +75,37 @@ void frame_set_page (uint32_t kernel_addr, struct page_elem *page) {
 
 // change to void
 bool
-frame_free (uint32_t kernel_addr){
-  lock_acquire(&frame_lock);
+frame_free (uint32_t kernel_addr) {
+  // lock_acquire(&frame_lock);
+  bool locked_by_own = false;
+  if (!lock_held_by_current_thread(&frame_lock)) {
+      lock_acquire(&frame_lock);
+      locked_by_own = true;
+  }
   struct frame_elem temp;
   temp.frame_addr = kernel_addr;
   struct hash_elem *hashElem = hash_find(&frame_hash, &temp.hash_e);
   if(hashElem == NULL) {
-    lock_release(&frame_lock);
     PANIC("frame_free: frame not found");
     return false;
   }
   
   struct frame_elem *removing = getFrameHashElem(hashElem);
-  list_remove(&removing->list_e);
   if(frame_pointer == &removing->list_e){
     frame_index_loop();
   }
+  list_remove(&removing->list_e);
   hash_delete(&frame_hash, hashElem);
   free(removing);
-  lock_release(&frame_lock);
+  if (locked_by_own) {
+    lock_release(&frame_lock);
+  }
+  // lock_release(&frame_lock);
   return true;
 }
 
 void
-frame_free_action (struct hash_elem *element, void *aux){
+frame_free_action (struct hash_elem *element, void *aux UNUSED){
   lock_acquire (&frame_lock);
   struct frame_elem *removing = getFrameHashElem(element);
   list_remove(&removing->list_e);
@@ -117,15 +125,18 @@ frame_swap () {
     lock_release(&frame_lock);
     return 0;
   }
-  while(pagedir_is_accessed(getPd(frame_pointer), getFrameListElem(frame_pointer)->ppage->page_address) == true){
-    pagedir_set_accessed(getPd(frame_pointer), getFrameListElem(frame_pointer)->ppage->page_address, false);
+  while(pagedir_is_accessed(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address) == true){
+    pagedir_set_accessed(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address, false);
     frame_index_loop();
   }
   struct frame_elem *frame_elem = getFrameListElem(frame_pointer);
   frame_elem->ppage->page_status = IN_SWAP;
-  frame_elem->ppage->swapped_id = swap_out(&frame_elem->frame_addr);
-  frame_elem->ppage->writable = pagedir_is_writable(getPd(frame_pointer), getFrameListElem(frame_pointer)->ppage->page_address);
-  pagedir_clear_page (frame_elem->ppage->pd, frame_elem->ppage->page_address);
+  frame_elem->ppage->swapped_id = swap_out((void *) frame_elem->frame_addr);
+  frame_elem->ppage->writable = pagedir_is_writable(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address);
+  frame_elem->ppage->dirty = pagedir_is_dirty(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address);
+  palloc_free_page((void *) frame_elem->frame_addr);
+  pagedir_clear_page (frame_elem->ppage->pd, (void *) frame_elem->ppage->page_address);
+  frame_free(frame_elem->frame_addr);
   frame_index_loop();
   lock_release(&frame_lock);
   return frame_elem->frame_addr;

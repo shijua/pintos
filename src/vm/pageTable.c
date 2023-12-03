@@ -4,6 +4,7 @@
 #include "threads/thread.h"
 #include "devices/swap.h"
 #include "threads/palloc.h"
+#include "userprog/pagedir.h"
 #include <debug.h>
 
 unsigned page_hash_func (const struct hash_elem *element, void *aux UNUSED) {
@@ -64,7 +65,7 @@ swapBackPage (const uint32_t page_address) {
     ASSERT(elem->page_status == IN_SWAP);
     void* kernel_address = palloc_get_page(PAL_USER);
     swap_in((void *) kernel_address, elem->swapped_id);
-    elem->kernel_address = kernel_address;
+    elem->kernel_address = (uint32_t) kernel_address;
     elem->page_status = IN_FRAME;
     lock_release(&page_lock);
     return kernel_address;
@@ -73,20 +74,20 @@ swapBackPage (const uint32_t page_address) {
 
 page_elem
 pageLookUp (const uint32_t page_address) {
-    bool is_locked = false;
+    bool locked_by_own = false;
     if (!lock_held_by_current_thread(&page_lock)) {
         lock_acquire(&page_lock);
-        is_locked = true;
+        locked_by_own = true;
     }
     // lock_acquire(&page_lock);
     struct page_elem temp;
     temp.page_address = page_address;
     struct hash_elem *find = hash_find(&thread_current()->supplemental_page_table, &temp.elem);
     if(find == NULL) {
-      if (is_locked) lock_release(&page_lock);
+      if (locked_by_own) lock_release(&page_lock);
       return NULL; // which means this page is not in the supplemental page table, so it is not a valid page
     }
-    if (is_locked) lock_release(&page_lock);
+    if (locked_by_own) lock_release(&page_lock);
     return getPageElem(find);
 }
 

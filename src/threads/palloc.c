@@ -113,11 +113,12 @@ void *
 palloc_get_page (enum palloc_flags flags) 
 {
   void *page = palloc_get_multiple (flags, 1);
-  if (page == NULL && (flags & PAL_USER)) {
-    /* return the adress swap out */
-    void *swap_page = frame_swap();
-    ASSERT (swap_page != NULL);
-    return swap_page;
+  if (page == NULL) {
+    /* evict a page from user pool */
+    frame_swap ();
+    page = palloc_get_multiple (flags, 1);
+    ASSERT (page != NULL);
+    return page;
   }
   return page;
 }

@@ -13,6 +13,7 @@
 #include "vm/pageTable.h"
 #include "threads/thread.h"
 #include "filesys/file.h"
+#include <stdlib.h>
 
 static bool load_page(struct file *file, off_t ofs, uint8_t *upage,
           uint32_t page_read_bytes, uint32_t page_zero_bytes, bool writable);
@@ -167,14 +168,16 @@ struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
   if(page != NULL) { // it is a fake page fault
     switch (page->page_status) {
       case IN_FRAME:
-        PANIC ("page fault on a page in frame");
+        syscall_exit(STATUS_FAIL);
         break;
       case IN_SWAP:
         void *kpage = swapBackPage(page->page_address);
         if (!install_page(page->page_address, kpage, page->writable)) {
           syscall_exit(STATUS_FAIL);
         }
-        frame_set_page(kpage, page);
+        pagedir_set_dirty(thread_current()->pagedir, page->page_address, page->dirty);
+        // frame_set_page(kpage, page);
+        // frame_add(kpage, page);
         break;
       case IN_FILE:
         struct lazy_file *file = page->lazy_file;
