@@ -92,6 +92,7 @@ start_process (void *create_para)
   /* initialize file list */
   struct thread* cur = thread_current();
   hash_init (&cur->file_table, file_hash_func, file_less_func, NULL);
+  hash_init (&cur->mmap_hash, mmap_hash_func, mmap_less_func, NULL);
   hash_init (&cur->supplemental_page_table, page_hash_func, page_less_func, NULL);
 
   /* get file name */
@@ -248,6 +249,7 @@ process_exit (void)
   }
   hash_destroy (&cur -> file_table, free_struct_file);
   lock_release (&file_lock);
+  hash_destroy(&cur -> mmap_hash, free_struct_mmap);
   free_child_list (&thread_current() -> child_list);
 
   /* Destroy the current process's page directory and switch back
@@ -612,6 +614,33 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       upage += PGSIZE;
     }
   return true;
+}
+
+bool
+load_mmap(struct File_info *file_info, uint8_t *upage, struct mmapElem *mmapElem)
+{
+  uint32_t length = file_length(file_info->file);
+  uint32_t read_bytes = length;
+  uint32_t zero_bytes = PGSIZE - (length % PGSIZE);
+  off_t ofs = 0;
+  int page_num = 0;
+  while (read_bytes > 0 || zero_bytes > 0) 
+    {
+      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+      size_t page_zero_bytes = PGSIZE - page_read_bytes;
+      
+      if (pageLookUp(upage) != NULL) {
+        return false;
+      }
+
+      ofs += page_read_bytes;
+      read_bytes -= page_read_bytes;
+      zero_bytes -= page_zero_bytes;
+      upage += PGSIZE;
+      page_num++;
+    }
+  mmapElem->page_num = page_num;
+  return load_segment(file_info->file, 0, upage, length, PGSIZE - (length % PGSIZE), true);
 }
 
 /* Create a minimal stack by mapping a zeroed page at the top of

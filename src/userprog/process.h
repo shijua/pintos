@@ -13,5 +13,6 @@ tid_t process_execute (const char *file_name);
 int process_wait (tid_t);
 void process_exit (void);
 void process_activate (void);
+bool load_mmap(struct File_info *, uint8_t *, struct mmapElem *);
 
 #endif /* userprog/process.h */

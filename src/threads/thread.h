@@ -120,6 +120,7 @@ struct thread
     int *exit_code;                    /* the pointer to exit code */
     struct semaphore *wait_sema;       /* origin 0 will be up when exit */
 #endif
+   struct hash mmap_hash;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
