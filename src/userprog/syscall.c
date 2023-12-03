@@ -28,6 +28,10 @@ static int syscall_write (int, void *, unsigned);
 static void syscall_seek (int, unsigned);
 static void syscall_tell (int);
 static void syscall_close (int);
+static void mmap(struct intr_frame *f);
+static void unmmap(struct intr_frame *f);
+
+static int mmapInt = 0;
 
 static struct File_info *get_file_info (int fd);
 
@@ -48,12 +52,33 @@ file_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux 
   return(GET_FILE(a)->fd < GET_FILE(b)->fd);
 }
 
+unsigned 
+mmap_hash_func (const struct hash_elem *element, void *aux UNUSED) 
+{
+  return(hash_int(hash_entry(element, struct mmapElem, elem)->mapid));
+}
+
+bool 
+mmap_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
+{
+  return(hash_entry(a, struct mmapElem, elem)->mapid
+    < hash_entry(b, struct mmapElem, elem)->mapid);
+}
+
+
 void free_struct_file (struct hash_elem *element, void *aux UNUSED)
 {
   struct File_info *info = GET_FILE(element);
   file_close (info->file);
   free (info);
 }
+
+void free_struct_mmap (struct hash_elem *element, void *aux UNUSED)
+{
+  struct mmapElem *info = hash_entry(element, struct mmapElem, elem);
+  free (info);
+}
+
 
 /* init the syscall */
 void
@@ -124,6 +149,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
     case SYS_CLOSE:
       check_validation (ARG_0);
       syscall_close (*(int *) (ARG_0));
+      break;
+    case SYS_MMAP:
+      mmap(f);
+      break;
+    case SYS_MUNMAP:
+      unmmap(f);
       break;
     default:
       syscall_exit (STATUS_FAIL);
@@ -349,5 +380,41 @@ static void check_validation_rw (const void *buffer, unsigned size) {
     if (local < USER_BOTTOM || !is_user_vaddr ((const void *) local)) {
           syscall_exit (STATUS_FAIL);
     }
+  }
+}
+
+static void mmap(struct intr_frame *f){
+  int fd = ARG_0;
+  void *address = ARG_1;
+  struct File_info *find = get_file_info(fd);
+  struct mmapElem *adding = malloc(sizeof(struct mmapElem));
+  if(find == NULL||!load_mmap(find, address, adding)){
+    f->eax = -1;
+    return;
+  }
+  f->eax = mmapInt;
+  adding->file_info = find;
+  adding->mapid = mmapInt - 1;
+  adding->page_address = address;
+  hash_insert(&thread_current()->mmap_hash, &adding->elem);
+}
+
+static void unmmap(struct intr_frame *f)
+{
+  struct mmapElem temp;
+  temp.mapid = ARG_0;
+  struct hash_elem *find = hash_find(&thread_current()->mmap_hash, &temp.elem);
+  if(find == NULL) {
+    PANIC("mapid not found");
+  }
+  struct mmapElem *found = hash_entry(find, struct mmapElem, elem);
+  int n = found->page_num;
+  for(int i = 0; i < n; i++){
+    uint8_t *page = found->page_address + i*PGSIZE;
+    if(pagedir_get_page(thread_current()->pagedir, page) != NULL
+      && pagedir_is_dirty(thread_current()->pagedir, page)) {
+        file_write_at(found->file_info->file, page, PGSIZE, i*PGSIZE);
+    }
+    pagedir_clear_page(thread_current()->pagedir, page);
   }
 }

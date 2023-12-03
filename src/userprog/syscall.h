@@ -20,13 +20,24 @@ void syscall_init (void);
 void syscall_exit (int);
 hash_hash_func file_hash_func;
 hash_less_func file_less_func;
-void free_struct_file (struct hash_elem *element, void *aux UNUSED);
+hash_hash_func mmap_hash_func;
+hash_less_func mmap_less_func;
+hash_action_func free_struct_file;
+hash_action_func free_struct_mmap;
 
 /* File descriptor which store the file and the file descriptor number */
 struct File_info {
   int fd;
   struct file *file;
   struct hash_elem elem;
+};
+
+struct mmapElem{
+ int mapid;
+ struct hash_elem elem;
+ uint32_t page_num;
+ uint32_t page_address;
+ struct File_info *file_info;   
 };
 
 #endif /* userprog/syscall.h */
