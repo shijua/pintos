@@ -14,6 +14,8 @@
 #include "devices/shutdown.h"
 #include "userprog/process.h"
 #include <inttypes.h>
+#include "vm/pageTable.h"
+#include "vm/frame.h"
 
 static void syscall_handler (struct intr_frame *);
 static void syscall_halt (void);
@@ -28,6 +30,10 @@ static int syscall_write (int, void *, unsigned);
 static void syscall_seek (int, unsigned);
 static void syscall_tell (int);
 static void syscall_close (int);
+static void mmap(struct intr_frame *f);
+static void unmmap(struct intr_frame *f);
+
+static int mmapInt = 0;
 
 static struct File_info *get_file_info (int fd);
 
@@ -35,6 +41,10 @@ static struct File_info *get_file_info (int fd);
 static void check_validation (const void *);
 static void check_validation_rw (const void *, unsigned);
 static void check_validation_str (const char **vaddr);
+
+/* function used for pin and unpin frame */
+static void pin_frame (void *uaddr);
+static void unpin_frame (void *uaddr);
 
 unsigned 
 file_hash_func (const struct hash_elem *element, void *aux UNUSED) 
@@ -48,12 +58,33 @@ file_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux 
   return(GET_FILE(a)->fd < GET_FILE(b)->fd);
 }
 
+unsigned 
+mmap_hash_func (const struct hash_elem *element, void *aux UNUSED) 
+{
+  return(hash_int(hash_entry(element, struct mmapElem, elem)->mapid));
+}
+
+bool 
+mmap_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
+{
+  return(hash_entry(a, struct mmapElem, elem)->mapid
+    < hash_entry(b, struct mmapElem, elem)->mapid);
+}
+
+
 void free_struct_file (struct hash_elem *element, void *aux UNUSED)
 {
   struct File_info *info = GET_FILE(element);
   file_close (info->file);
   free (info);
 }
+
+void free_struct_mmap (struct hash_elem *element, void *aux UNUSED)
+{
+  struct mmapElem *info = hash_entry(element, struct mmapElem, elem);
+  free (info);
+}
+
 
 /* init the syscall */
 void
@@ -127,6 +158,12 @@ syscall_handler (struct intr_frame *f UNUSED) {
       check_validation (ARG_0);
       syscall_close (*(int *) (ARG_0));
       break;
+    case SYS_MMAP:
+      mmap(f);
+      break;
+    case SYS_MUNMAP:
+      unmmap(f);
+      break;
     default:
       syscall_exit (STATUS_FAIL);
       break;
@@ -162,7 +199,10 @@ syscall_exit (int status) {
    arguments, and returns the new process’s program id (pid). */
 static pid_t
 syscall_exec (const char *cmd_line) {
-  return process_execute (cmd_line);
+  pin_frame ((void*) cmd_line);
+  pid_t pid = process_execute (cmd_line);
+  unpin_frame ((void*) cmd_line);
+  return pid;
 }
 
 /* Waits for a child process pid and retrieves the child’s exit status. */
@@ -175,7 +215,9 @@ syscall_wait (pid_t pid) {
 static int
 syscall_create (const char *file, unsigned initial_size) {
   lock_acquire (&file_lock);
+  pin_frame (file);
   bool success = filesys_create (file, initial_size);
+  unpin_frame (file);
   lock_release (&file_lock);
   return success;
 }
@@ -184,7 +226,9 @@ syscall_create (const char *file, unsigned initial_size) {
 static int
 syscall_remove (const char *file) {
   lock_acquire (&file_lock);
+  pin_frame (file);
   bool success = filesys_remove (file);
+  unpin_frame (file);
   lock_release (&file_lock);
   return success;
 }
@@ -194,12 +238,14 @@ syscall_remove (const char *file) {
 static int
 syscall_open (const char *file) {
   lock_acquire (&file_lock);
+  pin_frame (file);
   struct file *f = filesys_open (file);
   if (f == NULL) {
     return -1;
   } else {
     struct File_info *info = malloc (sizeof (struct File_info));
     if (info == NULL) {
+      unpin_frame (file);
       lock_release (&file_lock);
       syscall_exit (STATUS_FAIL);
     }
@@ -207,6 +253,7 @@ syscall_open (const char *file) {
     info->file = f;
     hash_insert(&thread_current ()->file_table, &info->elem);
   }
+  unpin_frame (file);
   lock_release (&file_lock);
   return thread_current ()->fd++;
 }
@@ -229,6 +276,7 @@ syscall_filesize (int fd) {
 static int
 syscall_read (int fd, void *buffer, unsigned size) {
   /* Reads size bytes from the open file fd into buffer */
+  pin_frame (buffer);
   if (fd == 0) {
     /* Standard input reading */
     for (unsigned i = 0; i < size; i++) {
@@ -239,10 +287,12 @@ syscall_read (int fd, void *buffer, unsigned size) {
   lock_acquire (&file_lock);
   struct File_info *info = get_file_info (fd);
   if (CHECK_NULL_FILE (info->file)) {
+    unpin_frame (buffer);
     lock_release (&file_lock);
     syscall_exit (STATUS_FAIL);
   }
   int read_size = file_read (info->file, buffer, size);
+  unpin_frame (buffer);
   lock_release (&file_lock);
   return read_size;
 }
@@ -251,6 +301,7 @@ syscall_read (int fd, void *buffer, unsigned size) {
 static int
 syscall_write (int fd, void *buffer, unsigned size) {
   /* Writes size bytes from buffer to the open file fd */
+  pin_frame (buffer);
   if (fd == 1) {
     /* Standard output writing */
     putbuf (buffer, size);
@@ -259,10 +310,12 @@ syscall_write (int fd, void *buffer, unsigned size) {
   lock_acquire (&file_lock);
   struct File_info *info = get_file_info (fd);
   if (CHECK_NULL_FILE (info->file)) {
+    unpin_frame (buffer);
     lock_release (&file_lock);
     syscall_exit (STATUS_FAIL);
   }
   int write_size = file_write (info->file, buffer, size);
+  unpin_frame (buffer);
   lock_release (&file_lock);
   return write_size;
 }
@@ -352,4 +405,63 @@ static void check_validation_rw (const void *buffer, unsigned size) {
           syscall_exit (STATUS_FAIL);
     }
   }
+}
+
+static void mmap(struct intr_frame *f){
+  int fd = ARG_0;
+  void *address = ARG_1;
+  struct File_info *find = get_file_info(fd);
+  struct mmapElem *adding = malloc(sizeof(struct mmapElem));
+  if(find == NULL||!load_mmap(find, address, adding)){
+    f->eax = -1;
+    return;
+  }
+  f->eax = mmapInt;
+  adding->file_info = find;
+  adding->mapid = mmapInt - 1;
+  adding->page_address = address;
+  hash_insert(&thread_current()->mmap_hash, &adding->elem);
+}
+
+static void unmmap(struct intr_frame *f)
+{
+  struct mmapElem temp;
+  temp.mapid = ARG_0;
+  struct hash_elem *find = hash_find(&thread_current()->mmap_hash, &temp.elem);
+  if(find == NULL) {
+    PANIC("mapid not found");
+  }
+  struct mmapElem *found = hash_entry(find, struct mmapElem, elem);
+  int n = found->page_num;
+  for(int i = 0; i < n; i++){
+    uint8_t *page = found->page_address + i*PGSIZE;
+    if(pagedir_get_page(thread_current()->pagedir, page) != NULL
+      && pagedir_is_dirty(thread_current()->pagedir, page)) {
+        file_write_at(found->file_info->file, page, PGSIZE, i*PGSIZE);
+    }
+    pagedir_clear_page(thread_current()->pagedir, page);
+  }
+}
+
+
+static void pin_frame (void *uaddr) {
+  lock_acquire(&frame_lock);
+  page_elem page = pageLookUp((uint32_t) pg_round_down (uaddr));
+  if (page == NULL || page->kernel_address == 0) {
+    lock_release(&frame_lock);
+    return;
+  }
+  frame_set_pin (page->kernel_address, true);
+  lock_release(&frame_lock);
+}
+
+static void unpin_frame (void *uaddr) {
+  lock_acquire(&frame_lock);
+  page_elem page = pageLookUp((uint32_t) pg_round_down (uaddr));
+  if (page == NULL || page->kernel_address == 0) {
+    lock_release(&frame_lock);
+    return;
+  }
+  frame_set_pin (page->kernel_address, false);
+  lock_release(&frame_lock);
 }

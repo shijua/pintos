@@ -15,6 +15,10 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+#ifdef VM
+#include "vm/pageTable.h"
+#include "vm/frame.h"
+#endif
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -98,6 +102,7 @@ thread_init (void)
   lock_init (&child_lock);
   sema_init (&execute_sema, 0);
   lock_init (&file_lock);
+  lock_init(&frame_lock);
 #endif
 
   /* Set up a thread structure for the running thread. */
@@ -124,11 +129,15 @@ thread_start (void)
   sema_down (&idle_started);
 }
 
-/* Returns the number of threads currently in the ready list */
+/* Returns the number of threads currently in the ready list. 
+   Disables interrupts to avoid any race-conditions on the ready list. */
 size_t
 threads_ready (void)
 {
-  return list_size (&ready_list);      
+  enum intr_level old_level = intr_disable ();
+  return list_size (&ready_list);
+  intr_set_level (old_level);
+  
 }
 
 /* Called by the timer interrupt handler at each timer tick.
@@ -505,6 +514,7 @@ init_thread (struct thread *t, const char *name, int priority)
 #ifdef USERPROG
   list_init (&t->child_list);
   t->parent_status = false;
+  lock_init (&t->page_lock);
 #endif
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

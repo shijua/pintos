@@ -13,6 +13,7 @@
 #include "vm/pageTable.h"
 #include "threads/thread.h"
 #include "filesys/file.h"
+#include <stdlib.h>
 
 static bool load_page(struct file *file, off_t ofs, uint8_t *upage,
           uint32_t page_read_bytes, uint32_t page_zero_bytes, bool writable);
@@ -164,7 +165,8 @@ page_fault (struct intr_frame *f)
   /* Turn interrupts back on (they were only off so that we could
      be assured of reading CR2 before it changed). */
   intr_enable ();
-  struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
+lock_acquire (&thread_current()->page_lock);
+struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
 
   /* check if it is a stack access */
   uint32_t esp = f->esp;
@@ -182,8 +184,16 @@ page_fault (struct intr_frame *f)
   if(page != NULL) { // it is a fake page fault
     switch (page->page_status) {
       case IN_FRAME:
+        lock_release (&thread_current()->page_lock);
+        syscall_exit(STATUS_FAIL);
         break;
       case IN_SWAP:
+        void *kpage = swapBackPage(page->page_address);
+        if (!install_page(page->page_address, kpage, page->writable)) {
+          syscall_exit(STATUS_FAIL);
+        }
+        pagedir_set_dirty(thread_current()->pagedir, page->page_address, page->dirty);
+        lock_release (&thread_current()->page_lock);
         break;
       case IN_FILE:
         struct lazy_file *file = page->lazy_file;
@@ -193,16 +203,17 @@ page_fault (struct intr_frame *f)
             lock_release (&file_lock);
             is_locked = true;
          }
-        load_page(file->file, file->offset, page->page_address, file->read_bytes, file->zero_bytes, file->writable);
+        load_page(file->file, file->offset, page->page_address, file->read_bytes, file->zero_bytes, page->writable);
         // lock back when finish loading
          if (is_locked) {
             lock_acquire (&file_lock);
          }
+         lock_release (&thread_current()->page_lock);
         break;
-
     }
     return;
   }
+lock_release (&thread_current()->page_lock);
   /* Count page faults. */
   page_fault_cnt++;
 
@@ -277,27 +288,24 @@ load_page(struct file *file, off_t ofs, uint8_t *upage,
    free (page->lazy_file);
 
    if (kpage == NULL) {
-
+        
         /* Get a new page of memory. */
         kpage = palloc_get_page (PAL_USER);
-        if (kpage == NULL){
-         free (page->lazy_file);
-          return false;
-        }
+        ASSERT (kpage != NULL);
 
         /* Add the page to the process's address space. */
-        if (!install_page (upage, kpage, writable))
+        if (!install_page (upage, kpage, writable)) 
         {
           palloc_free_page (kpage);
           free (page->lazy_file);
-          return false;
-        }
+          return false; 
+        }  
          page->kernel_address = kpage;
-
+        
       } else {
         /* Check if writable flag for the page should be updated */
         if(writable && !pagedir_is_writable(t->pagedir, upage)) {
-          pagedir_set_writable(t->pagedir, upage, writable);
+          pagedir_set_writable(t->pagedir, upage, writable); 
         }
    }
   /* Load data into the page. */

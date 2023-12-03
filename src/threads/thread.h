@@ -29,9 +29,11 @@ typedef int tid_t;
 #ifdef USERPROG
 /* set a global lock for file system */
 struct lock file_lock;
-/* lock used for TODO*/
+/* lock used for deletion and generation of child*/
 struct lock child_lock;
-/* lock used for ensure check whether process 
+/* lock use for frame */
+struct lock frame_lock;
+/* lock used for ensure check whether process
    is created successfully before return tid */
 struct semaphore execute_sema;
 #endif
@@ -104,6 +106,8 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    struct hash supplemental_page_table; /* supplemental page table */
+    struct lock page_lock;             /* lock for page table */
     struct hash supplemental_page_table;
     int stack_size;                     /* the size of stack */
     void *esp;                          /* the esp of thread store it handle case in task 3 stack growth */
@@ -122,6 +126,7 @@ struct thread
     int *exit_code;                    /* the pointer to exit code */
     struct semaphore *wait_sema;       /* origin 0 will be up when exit */
 #endif
+   struct hash mmap_hash;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

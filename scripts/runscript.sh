@@ -1,12 +1,13 @@
+#!/bin/bash
 nowrunning="task2-pcb.sh"
-homedir=/Users/yifan/Desktop/pintos/pintos_7
+homedir=/homes/wh1322/Documents/year2/pintos_7
 cd scripts
 rm -rf output
 mkdir output
 
 cd $homedir
 
-cd src/userprog
+cd src/vm
 
 ../../scripts/task2-pcb.sh | tee ../../scripts/output/output.txt
 
