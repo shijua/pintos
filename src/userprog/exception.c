@@ -165,15 +165,20 @@ page_fault (struct intr_frame *f)
   /* Turn interrupts back on (they were only off so that we could
      be assured of reading CR2 before it changed). */
   intr_enable ();
-lock_acquire (&thread_current()->page_lock);
-struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
+  /* Determine cause. */
+  not_present = (f->error_code & PF_P) == 0;
+  write = (f->error_code & PF_W) != 0;
+  user = (f->error_code & PF_U) != 0;
+  lock_acquire (&thread_current()->page_lock);
+
+  struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
 
   /* check if it is a stack access */
   uint32_t esp = f->esp;
   if(page == NULL && is_stack_address(fault_addr, esp)) {
-    printf("fault address: %p\n", fault_addr);
-    printf("esp: %p\n", esp);
-    printf("\n")
+//    printf("fault address: %p\n", fault_addr);
+//    printf("esp: %p\n", esp);
+//    printf("\n");
     /* grow the stack */
     if(!grow_stack(fault_addr)) {
       syscall_exit(STATUS_FAIL);
@@ -217,10 +222,7 @@ lock_release (&thread_current()->page_lock);
   /* Count page faults. */
   page_fault_cnt++;
 
-  /* Determine cause. */
-  not_present = (f->error_code & PF_P) == 0;
-  write = (f->error_code & PF_W) != 0;
-  user = (f->error_code & PF_U) != 0;
+
 
   /* check if the memory is unmapped */
   if (!is_valid_ptr (fault_addr)) {
@@ -253,8 +255,11 @@ is_stack_address (void *fault_addr, void *esp){
 /* grow the stack */
 static bool
 grow_stack (void *fault_addr) {
+  printf("grow stack\n");
   struct thread *curr = thread_current ();
-
+  if(curr->stack_size + PGSIZE >= STACK_MAX){
+    return false;
+  }
   /* allocate a new page */
   uint8_t *kpage = palloc_get_page (PAL_USER);
   if (kpage == NULL) {

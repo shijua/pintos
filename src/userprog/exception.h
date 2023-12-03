@@ -7,6 +7,7 @@
 #define PF_U 0x4    /* 0: kernel, 1: user process. */
 #define PUSH_SIZE 4
 #define PUSH_A_SIZE 32
+#define STACK_MAX 0x800000
 
 void exception_init (void);
 void exception_print_stats (void);
