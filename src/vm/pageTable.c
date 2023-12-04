@@ -15,7 +15,7 @@ bool page_less_func (const struct hash_elem *a, const struct hash_elem *b, void 
   return getPageElem(a)->page_address <  getPageElem(b)->page_address;
 }
 
-void pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enum status status) {
+void pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enum page_status status) {
     ASSERT (pageLookUp(page_address) == NULL); // make sure this page is not in the supplemental page table
     page_elem adding = malloc(sizeof(struct page_elem));
     if(adding == NULL) {
@@ -46,6 +46,25 @@ page_free_action (struct hash_elem *element, void *aux UNUSED) {
           break;
     }
     free(removing);
+};
+
+void
+page_clear (const uint32_t page_address) {
+    page_elem removing = pageLookUp(page_address);
+    ASSERT (removing != NULL);
+    switch (removing->page_status) {
+      case IN_FRAME:
+          frame_free (removing->kernel_address);
+          break;
+      case IN_SWAP:
+          swap_drop (removing->swapped_id);
+          break;
+      case IN_FILE:
+          free (removing->lazy_file);
+          break;
+    }
+    hash_delete(&thread_current()->supplemental_page_table, &removing->elem);
+    free(removing);
 }
 
 void *
@@ -65,8 +84,8 @@ swapBackPage (const uint32_t page_address) {
     return kernel_address;
 }
 
-
-page_elem
+// gai cheng pointer
+page_elem 
 pageLookUp (const uint32_t page_address) {
     struct page_elem temp;
     temp.page_address = page_address;

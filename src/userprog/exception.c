@@ -13,7 +13,7 @@
 #include "vm/pageTable.h"
 #include "threads/thread.h"
 #include "filesys/file.h"
-#include <stdlib.h>
+#include "threads/malloc.h"
 
 static bool load_page(struct file *file, off_t ofs, uint8_t *upage,
           uint32_t page_read_bytes, uint32_t page_zero_bytes, bool writable);

@@ -13,10 +13,11 @@
 unsigned page_hash_func (const struct hash_elem *element, void *aux);
 bool page_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux);
 
-enum status {
+enum page_status {
    IN_SWAP,
    IN_FRAME,
-   IN_FILE
+   IN_FILE,
+   IS_MMAP
 };
 
 struct lazy_file {
@@ -31,7 +32,7 @@ typedef struct page_elem {
    struct hash_elem elem;
    uint32_t *pd;
    uint32_t page_address;
-   enum status page_status;
+   enum page_status page_status;
    // union info {
    struct lazy_file *lazy_file;
    uint32_t kernel_address;
@@ -42,7 +43,8 @@ typedef struct page_elem {
    struct lock lock;
 } *page_elem;
 
-void pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enum status status);
+void pageTableAdding (const uint32_t, const uint32_t, enum page_status);
+void page_clear (const uint32_t);
 hash_action_func page_free_action;
 void *swapBackPage (const uint32_t page_address);
 page_elem pageLookUp (const uint32_t page_address);

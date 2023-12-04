@@ -406,25 +406,27 @@ static void check_validation_rw (const void *buffer, unsigned size) {
 }
 
 static void mmap(struct intr_frame *f){
-  int fd = ARG_0;
-  void *address = ARG_1;
+  int fd = *(int *)(f->esp + 4);
+  uint8_t *address = *(uint8_t **)(f->esp + 8);
   struct File_info *find = get_file_info(fd);
   struct mmapElem *adding = malloc(sizeof(struct mmapElem));
   if(find == NULL||!load_mmap(find, address, adding)){
+    free(adding);
     f->eax = -1;
     return;
   }
   f->eax = mmapInt;
   adding->file_info = find;
-  adding->mapid = mmapInt - 1;
+  adding->mapid = mmapInt;
   adding->page_address = address;
   hash_insert(&thread_current()->mmap_hash, &adding->elem);
+  mmapInt++;
 }
 
 static void unmmap(struct intr_frame *f)
 {
   struct mmapElem temp;
-  temp.mapid = ARG_0;
+  temp.mapid = *(int *)(f->esp + 4);
   struct hash_elem *find = hash_find(&thread_current()->mmap_hash, &temp.elem);
   if(find == NULL) {
     PANIC("mapid not found");
@@ -435,10 +437,17 @@ static void unmmap(struct intr_frame *f)
     uint8_t *page = found->page_address + i*PGSIZE;
     if(pagedir_get_page(thread_current()->pagedir, page) != NULL
       && pagedir_is_dirty(thread_current()->pagedir, page)) {
-        file_write_at(found->file_info->file, page, PGSIZE, i*PGSIZE);
+        file_seek (found->file_info->file, i*PGSIZE);
+        int k = file_write(found->file_info->file, page, PGSIZE);
+        printf("%d\n\n\n", k);
     }
+    
     pagedir_clear_page(thread_current()->pagedir, page);
+    page_clear(page);
   }
+  hash_delete(&thread_current()->mmap_hash, find);
+  free(found);
+  f->eax = 0;
 }
 
 

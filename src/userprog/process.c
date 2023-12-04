@@ -592,6 +592,7 @@ load_mmap(struct File_info *file_info, uint8_t *upage, struct mmapElem *mmapElem
   uint32_t length = file_length(file_info->file);
   uint32_t read_bytes = length;
   uint32_t zero_bytes = PGSIZE - (length % PGSIZE);
+  uint8_t *oldUpage = upage;
   off_t ofs = 0;
   int page_num = 0;
   while (read_bytes > 0 || zero_bytes > 0) 
@@ -612,7 +613,7 @@ load_mmap(struct File_info *file_info, uint8_t *upage, struct mmapElem *mmapElem
       page_num++;
     }
   mmapElem->page_num = page_num;
-  return load_segment(file_info->file, 0, upage, length, PGSIZE - (length % PGSIZE), true);
+  return load_segment(file_info->file, 0, oldUpage, length, PGSIZE - (length % PGSIZE), true);
 }
 
 /* Create a minimal stack by mapping a zeroed page at the top of
