@@ -13,12 +13,11 @@
 #include "vm/pageTable.h"
 #include "threads/thread.h"
 #include "filesys/file.h"
+#include "userprog/process.h"
 #include <stdlib.h>
 
 static void load_page(struct file *file, off_t ofs, uint8_t *upage,
           uint32_t page_read_bytes, uint32_t page_zero_bytes, bool writable);
-
-static bool install_page (void *upage, void *kpage, bool writable);
 
 static bool is_stack_address (void *fault_addr, void *esp);
 static void grow_stack (void *fault_addr);
@@ -218,8 +217,6 @@ lock_release (&thread_current()->page_lock);
   /* Count page faults. */
   page_fault_cnt++;
 
-
-
   /* check if the memory is unmapped */
   if (!is_valid_ptr (fault_addr)) {
       syscall_exit (STATUS_FAIL);
@@ -238,11 +235,10 @@ lock_release (&thread_current()->page_lock);
 static bool
 is_stack_address (void *fault_addr, void *esp){
   struct thread *curr = thread_current ();
-  if (esp - PUSH_A_SIZE == fault_addr || esp - PUSH_SIZE == fault_addr || esp == fault_addr) {
-    /* check it exceed the stack size */
-    if (curr -> stack_size >= PGSIZE * 2 * 1024) { //TODO: magic number
-      return false;
-    }
+  if (fault_addr >= PHYS_BASE || fault_addr < PHYS_BASE - STACK_MAX) {
+    return false;
+  }
+  if (esp - PUSH_A_SIZE == fault_addr || esp - PUSH_SIZE == fault_addr || esp <= fault_addr) {
     return true;
   }
   return false;
@@ -253,6 +249,7 @@ static void
 grow_stack (void *round_addr) {
   struct thread *curr = thread_current ();
   if(curr->stack_size + PGSIZE >= STACK_MAX){
+    lock_release (&thread_current()->page_lock);
     syscall_exit(STATUS_FAIL);
   }
   /* allocate a new page */
@@ -314,13 +311,3 @@ load_page(struct file *file, off_t ofs, uint8_t *upage,
   memset(kpage + page_read_bytes, 0, page_zero_bytes);
 }
 
-static bool
-install_page (void *upage, void *kpage, bool writable)
-{
-  struct thread *t = thread_current ();
-
-  /* Verify that there's not already a page at that virtual
-     address, then map our page there. */
-  return (pagedir_get_page (t->pagedir, upage) == NULL
-          && pagedir_set_page (t->pagedir, upage, kpage, writable));
-}

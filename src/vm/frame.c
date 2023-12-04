@@ -45,7 +45,6 @@ void frame_add (uint32_t frame_addr, struct page_elem *page) {
   }
   adding->frame_addr = frame_addr;
   adding->ppage = page;
-  adding->is_pin = false;
   hash_insert(&frame_hash, &adding->hash_e);
   list_insert(frame_pointer, &adding->list_e);
   // if the frame was empty before adding
@@ -56,19 +55,6 @@ void frame_add (uint32_t frame_addr, struct page_elem *page) {
   pagedir_set_accessed(adding->ppage->pd, (void *) adding->ppage->page_address, true);
   lock_release(&frame_lock);
 }
-
-void frame_set_pin (uint32_t kernel_addr, bool pin) {
-  struct frame_elem temp;
-  temp.frame_addr = kernel_addr;
-  struct hash_elem *hashElem = hash_find(&frame_hash, &temp.hash_e);
-  if(hashElem == NULL) {
-    PANIC("frame_set_page: frame not found");
-  }
-  struct frame_elem *frame_elem = getFrameHashElem(hashElem);
-  pagedir_set_accessed(frame_elem->ppage->pd, (void *) frame_elem->ppage->page_address, true);
-  frame_elem->is_pin = pin;
-}
-
 
 void
 frame_free (uint32_t kernel_addr) {
@@ -115,7 +101,8 @@ frame_swap () {
   if(frame_pointer == NULL){
     PANIC("frame_swap: frame_pointer is NULL");
   }
-  while(getFrameListElem(frame_pointer)->is_pin || pagedir_is_accessed(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address) == true){
+  // search until it is not pinned and not accessed
+  while(getFrameListElem(frame_pointer)->ppage->is_pin || pagedir_is_accessed(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address) == true){
     pagedir_set_accessed(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address, false);
     frame_index_loop();
   }

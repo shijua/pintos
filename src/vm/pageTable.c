@@ -27,6 +27,7 @@ void pageTableAdding (const uint32_t page_address, const uint32_t kernel_address
     adding->page_status = status;
     adding->swapped_id = -1;
     adding->lock = thread_current()->page_lock;
+    adding->is_pin = false;
     hash_insert(&thread_current()->supplemental_page_table, &adding->elem);
 }
 
@@ -48,6 +49,8 @@ page_free_action (struct hash_elem *element, void *aux UNUSED) {
     free(removing);
 }
 
+
+// TODO using pageLoopUp for find process
 void *
 swapBackPage (const uint32_t page_address) {
     struct page_elem temp;
@@ -65,7 +68,6 @@ swapBackPage (const uint32_t page_address) {
     return kernel_address;
 }
 
-
 page_elem
 pageLookUp (const uint32_t page_address) {
     struct page_elem temp;
@@ -77,3 +79,11 @@ pageLookUp (const uint32_t page_address) {
     return getPageElem(find);
 }
 
+bool page_set_pin (uint32_t page_address, bool pin) {
+    struct hash_elem *find = pageLookUp(page_address);
+    if (find == NULL) {
+        return false;
+    }
+    getPageElem(find)->is_pin = pin;
+    return true;
+}

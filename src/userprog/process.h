@@ -15,4 +15,6 @@ void process_exit (void);
 void process_activate (void);
 bool load_mmap(struct File_info *, uint8_t *, struct mmapElem *);
 
+/* load() helpers. */
+bool install_page (void *upage, void *kpage, bool writable);
 #endif /* userprog/process.h */

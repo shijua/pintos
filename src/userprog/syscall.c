@@ -16,6 +16,7 @@
 #include <inttypes.h>
 #include "vm/pageTable.h"
 #include "vm/frame.h"
+#include "threads/palloc.h"
 
 static void syscall_handler (struct intr_frame *);
 static void syscall_halt (void);
@@ -379,8 +380,8 @@ static void check_validation (const void *vaddr) {
   if (vaddr == NULL || !is_user_vaddr (vaddr)) {
     syscall_exit (STATUS_FAIL);
   } else {
-    void *kernal_vaddr = pagedir_get_page (pd, vaddr);
-    if (kernal_vaddr == NULL) {
+    page_elem page_elem = pageLookUp (pg_round_down (vaddr));
+    if (page_elem == NULL) {
       syscall_exit (STATUS_FAIL);
     } 
   }
@@ -398,13 +399,17 @@ static void check_validation_str (const char **vaddr) {
    using for loop.  */
 static void check_validation_rw (const void *buffer, unsigned size) {
   /* address of the start of buffer */
-  uint32_t local = (uint32_t) buffer;
+  uint32_t local = (uint32_t) pg_round_down (buffer);
   unsigned buffer_length = local + size;
-  for (; local < buffer_length; local++) {
+  for (; local < buffer_length; local += PGSIZE) {
     if (local < USER_BOTTOM || !is_user_vaddr ((const void *) local)) {
           syscall_exit (STATUS_FAIL);
     }
   }
+  if (buffer_length < USER_BOTTOM || !is_user_vaddr ((const void *) buffer_length)) {
+    syscall_exit (STATUS_FAIL);
+  }
+  check_validation (buffer);
 }
 
 static void mmap(struct intr_frame *f){
@@ -443,25 +448,20 @@ static void unmmap(struct intr_frame *f)
   }
 }
 
-
 static void pin_frame (void *uaddr) {
-  lock_acquire(&frame_lock);
-  page_elem page = pageLookUp((uint32_t) pg_round_down (uaddr));
-  if (page == NULL || page->kernel_address == 0) {
-    lock_release(&frame_lock);
-    return;
+  lock_acquire(&thread_current()->page_lock);
+  if (!page_set_pin ((uint32_t) pg_round_down (uaddr), true)) {
+    lock_release(&thread_current()->page_lock);
+    syscall_exit (STATUS_FAIL);
   }
-  frame_set_pin (page->kernel_address, true);
-  lock_release(&frame_lock);
+  lock_release(&thread_current()->page_lock);
 }
 
 static void unpin_frame (void *uaddr) {
-  lock_acquire(&frame_lock);
-  page_elem page = pageLookUp((uint32_t) pg_round_down (uaddr));
-  if (page == NULL || page->kernel_address == 0) {
-    lock_release(&frame_lock);
-    return;
+  lock_acquire(&thread_current()->page_lock);
+  if (!page_set_pin ((uint32_t) pg_round_down (uaddr), false)) {
+    lock_release(&thread_current()->page_lock);
+    syscall_exit (STATUS_FAIL);
   }
-  frame_set_pin (page->kernel_address, false);
-  lock_release(&frame_lock);
+  lock_release(&thread_current()->page_lock);
 }
