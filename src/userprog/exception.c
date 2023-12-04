@@ -15,13 +15,13 @@
 #include "filesys/file.h"
 #include <stdlib.h>
 
-static bool load_page(struct file *file, off_t ofs, uint8_t *upage,
+static void load_page(struct file *file, off_t ofs, uint8_t *upage,
           uint32_t page_read_bytes, uint32_t page_zero_bytes, bool writable);
 
 static bool install_page (void *upage, void *kpage, bool writable);
 
 static bool is_stack_address (void *fault_addr, void *esp);
-static bool grow_stack (void *fault_addr);
+static void grow_stack (void *fault_addr);
 
 // function used to check if pointer mapped to a unmapped memory
 static bool
@@ -176,13 +176,9 @@ page_fault (struct intr_frame *f)
   /* check if it is a stack access */
   uint32_t esp = f->esp;
   if(page == NULL && is_stack_address(fault_addr, esp)) {
-//    printf("fault address: %p\n", fault_addr);
-//    printf("esp: %p\n", esp);
-//    printf("\n");
     /* grow the stack */
-    if(!grow_stack(fault_addr)) {
-      syscall_exit(STATUS_FAIL);
-    }
+    grow_stack(pg_round_down(fault_addr));
+    lock_release (&thread_current()->page_lock);
     return;
   }
 
@@ -195,7 +191,7 @@ page_fault (struct intr_frame *f)
       case IN_SWAP:
         void *kpage = swapBackPage(page->page_address);
         if (!install_page(page->page_address, kpage, page->writable)) {
-          syscall_exit(STATUS_FAIL);
+          PANIC ("install page failed\n");
         }
         pagedir_set_dirty(thread_current()->pagedir, page->page_address, page->dirty);
         lock_release (&thread_current()->page_lock);
@@ -253,32 +249,27 @@ is_stack_address (void *fault_addr, void *esp){
 }
 
 /* grow the stack */
-static bool
-grow_stack (void *fault_addr) {
-  printf("grow stack\n");
+static void
+grow_stack (void *round_addr) {
   struct thread *curr = thread_current ();
   if(curr->stack_size + PGSIZE >= STACK_MAX){
-    return false;
+    syscall_exit(STATUS_FAIL);
   }
   /* allocate a new page */
   uint8_t *kpage = palloc_get_page (PAL_USER);
-  if (kpage == NULL) {
-    return false;
-  }
-  /* add the page to the process's address space */
-  if (!install_page (pg_round_down (fault_addr), kpage, true)) {
-    palloc_free_page (kpage);
-    return false;
-  }
   /* add the page to the supplemental page table */
-  pageTableAdding(pg_round_down (fault_addr), kpage, IN_FRAME);
+  pageTableAdding(round_addr, kpage, IN_FRAME);
+  /* add the page to the process's address space */
+  if (!install_page (round_addr, kpage, true)) {
+    palloc_free_page (kpage);
+    PANIC("install page failed");
+  }
   /* update the stack size */
   curr->stack_size += PGSIZE;
-  return true;
 }
 
 /* load single page */
-static bool
+static void
 load_page(struct file *file, off_t ofs, uint8_t *upage,
           uint32_t page_read_bytes, uint32_t page_zero_bytes, bool writable) {
 
@@ -303,7 +294,7 @@ load_page(struct file *file, off_t ofs, uint8_t *upage,
         {
           palloc_free_page (kpage);
           free (page->lazy_file);
-          return false; 
+          PANIC ("install page failed\n");
         }  
          page->kernel_address = kpage;
         
@@ -317,11 +308,10 @@ load_page(struct file *file, off_t ofs, uint8_t *upage,
   lock_acquire(&file_lock);
   if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes) {
    lock_release(&file_lock);
-   return false;
+   PANIC("load page failed\n");
   }
   lock_release(&file_lock);
   memset(kpage + page_read_bytes, 0, page_zero_bytes);
-  return true;
 }
 
 static bool

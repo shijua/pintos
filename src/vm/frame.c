@@ -40,7 +40,7 @@ frame_index_loop() {
 void frame_add (uint32_t frame_addr, struct page_elem *page) {
   lock_acquire(&frame_lock);
   struct frame_elem *adding = malloc(sizeof(struct frame_elem));
-  if(adding == NULL) {
+  if(page == NULL) {
     PANIC("frame_add: malloc failed");
   }
   adding->frame_addr = frame_addr;
