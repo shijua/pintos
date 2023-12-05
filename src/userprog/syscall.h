@@ -16,15 +16,6 @@ typedef int pid_t;
 #define ARG_1 f->esp + 8
 #define ARG_2 f->esp + 12
 
-void syscall_init (void);
-void syscall_exit (int);
-hash_hash_func file_hash_func;
-hash_less_func file_less_func;
-hash_hash_func mmap_hash_func;
-hash_less_func mmap_less_func;
-hash_action_func free_struct_file;
-hash_action_func free_struct_mmap;
-
 /* File descriptor which store the file and the file descriptor number */
 struct File_info {
   int fd;
@@ -37,7 +28,17 @@ struct mmapElem{
  struct hash_elem elem;
  uint32_t page_num;
  uint32_t page_address;
- struct File_info *file_info;   
+ struct file *file;   
 };
+
+void syscall_init (void);
+void syscall_exit (int);
+void munmapHelper(struct hash_elem *, void *);
+hash_hash_func file_hash_func;
+hash_less_func file_less_func;
+hash_hash_func mmap_hash_func;
+hash_less_func mmap_less_func;
+hash_action_func free_struct_file;
+hash_action_func free_struct_mmap;
 
 #endif /* userprog/syscall.h */

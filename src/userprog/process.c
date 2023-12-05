@@ -241,6 +241,7 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+  hash_destroy(&cur -> mmap_hash, munmapHelper);
   uint32_t *pd;
   /* allow write to executable file after process terminates */
   lock_acquire (&file_lock);
@@ -249,10 +250,9 @@ process_exit (void)
   }
   hash_destroy (&cur -> file_table, free_struct_file);
   lock_release (&file_lock);
-  lock_acquire (&cur->page_lock);
+  //lock_acquire (&cur->page_lock);
   hash_destroy (&cur -> supplemental_page_table, page_free_action);
-  lock_release (&cur->page_lock);
-  hash_destroy(&cur -> mmap_hash, free_struct_mmap);
+  //lock_release (&cur->page_lock);
   free_child_list (&thread_current() -> child_list);
 
   /* Destroy the current process's page directory and switch back
@@ -583,9 +583,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 }
 
 bool
-load_mmap(struct File_info *file_info, uint8_t *upage, struct mmapElem *mmapElem)
+load_mmap(struct file *file, uint8_t *upage, struct mmapElem *mmapElem)
 {
-  uint32_t length = file_length(file_info->file);
+  uint32_t length = file_length(file);
+  if((length == 0 || pg_ofs(upage) != 0) || upage == NULL) {
+    return false;
+  }
   uint32_t read_bytes = length;
   uint32_t zero_bytes = PGSIZE - (length % PGSIZE);
   uint8_t *oldUpage = upage;
@@ -609,7 +612,7 @@ load_mmap(struct File_info *file_info, uint8_t *upage, struct mmapElem *mmapElem
       page_num++;
     }
   mmapElem->page_num = page_num;
-  return load_segment(file_info->file, 0, oldUpage, length, PGSIZE - (length % PGSIZE), true);
+  return load_segment(file, 0, oldUpage, length, PGSIZE - (length % PGSIZE), true);
 }
 
 /* Create a minimal stack by mapping a zeroed page at the top of

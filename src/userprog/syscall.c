@@ -416,18 +416,44 @@ static void mmap(struct intr_frame *f){
   int fd = *(int *)(f->esp + 4);
   uint8_t *address = *(uint8_t **)(f->esp + 8);
   struct File_info *find = get_file_info(fd);
+  if(find == NULL){
+    f->eax = -1;
+    return;
+  }
+  struct file *file = file_reopen(find -> file);
   struct mmapElem *adding = malloc(sizeof(struct mmapElem));
-  if(find == NULL||!load_mmap(find, address, adding)){
+  if(!load_mmap(file, address, adding)){
     free(adding);
     f->eax = -1;
     return;
   }
   f->eax = mmapInt;
-  adding->file_info = find;
+  adding->file = file;
   adding->mapid = mmapInt;
   adding->page_address = address;
   hash_insert(&thread_current()->mmap_hash, &adding->elem);
   mmapInt++;
+}
+
+void
+munmapHelper(struct hash_elem *found_elem, void *aux UNUSED)
+{
+  struct mmapElem *found = hash_entry(found_elem, struct mmapElem, elem);
+  int n = found->page_num;
+  for(int i = 0; i < n; i++){
+    uint8_t *page = found->page_address + i*PGSIZE;
+    if(pagedir_get_page(thread_current()->pagedir, page) != NULL
+      && pagedir_is_dirty(thread_current()->pagedir, page)) {
+        lock_acquire(&file_lock);
+        int k = file_write_at(found->file, page, PGSIZE, i*PGSIZE);
+        lock_release(&file_lock);
+    }
+    
+    pagedir_clear_page(thread_current()->pagedir, page);
+    page_clear(page);
+  }
+  file_close(found->file);
+  free(found);
 }
 
 static void unmmap(struct intr_frame *f)
@@ -438,39 +464,24 @@ static void unmmap(struct intr_frame *f)
   if(find == NULL) {
     PANIC("mapid not found");
   }
-  struct mmapElem *found = hash_entry(find, struct mmapElem, elem);
-  int n = found->page_num;
-  for(int i = 0; i < n; i++){
-    uint8_t *page = found->page_address + i*PGSIZE;
-    if(pagedir_get_page(thread_current()->pagedir, page) != NULL
-      && pagedir_is_dirty(thread_current()->pagedir, page)) {
-        file_seek (found->file_info->file, i*PGSIZE);
-        int k = file_write(found->file_info->file, page, PGSIZE);
-        printf("%d\n\n\n", k);
-    }
-    
-    pagedir_clear_page(thread_current()->pagedir, page);
-    page_clear(page);
-  }
   hash_delete(&thread_current()->mmap_hash, find);
-  free(found);
-  f->eax = 0;
+  munmapHelper(find, NULL);
 }
 
 static void pin_frame (void *uaddr) {
-  lock_acquire(&thread_current()->page_lock);
-  if (!page_set_pin ((uint32_t) pg_round_down (uaddr), true)) {
-    lock_release(&thread_current()->page_lock);
-    syscall_exit (STATUS_FAIL);
-  }
-  lock_release(&thread_current()->page_lock);
+  // lock_acquire(&thread_current()->page_lock);
+  // if (!page_set_pin ((uint32_t) pg_round_down (uaddr), true)) {
+  //   lock_release(&thread_current()->page_lock);
+  //   syscall_exit (STATUS_FAIL);
+  // }
+  // lock_release(&thread_current()->page_lock);
 }
 
 static void unpin_frame (void *uaddr) {
-  lock_acquire(&thread_current()->page_lock);
-  if (!page_set_pin ((uint32_t) pg_round_down (uaddr), false)) {
-    lock_release(&thread_current()->page_lock);
-    syscall_exit (STATUS_FAIL);
-  }
-  lock_release(&thread_current()->page_lock);
+  // lock_acquire(&thread_current()->page_lock);
+  // if (!page_set_pin ((uint32_t) pg_round_down (uaddr), false)) {
+  //   lock_release(&thread_current()->page_lock);
+  //   syscall_exit (STATUS_FAIL);
+  // }
+  // lock_release(&thread_current()->page_lock);
 }
