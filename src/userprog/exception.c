@@ -13,15 +13,17 @@
 #include "vm/pageTable.h"
 #include "threads/thread.h"
 #include "filesys/file.h"
+#include "userprog/process.h"
 #include "threads/malloc.h"
 
-static bool load_page(struct file *file, off_t ofs, uint8_t *upage,
+static void load_page(struct file *file, off_t ofs, uint8_t *upage,
           uint32_t page_read_bytes, uint32_t page_zero_bytes, bool writable);
 
-static bool install_page (void *upage, void *kpage, bool writable);
+static bool is_stack_address (void *fault_addr, void *esp);
+static void grow_stack (void *fault_addr);
 
 // function used to check if pointer mapped to a unmapped memory
-static bool 
+static bool
 is_valid_ptr(const void *user_ptr)
 {
   struct thread *curr = thread_current ();
@@ -85,14 +87,14 @@ exception_init (void)
 
 /* Prints exception statistics. */
 void
-exception_print_stats (void) 
+exception_print_stats (void)
 {
   printf ("Exception: %lld page faults\n", page_fault_cnt);
 }
 
 /* Handler for an exception (probably) caused by a user process. */
 static void
-kill (struct intr_frame *f) 
+kill (struct intr_frame *f)
 {
   /* This interrupt is one (probably) caused by a user process.
      For example, the process might have tried to access unmapped
@@ -101,7 +103,7 @@ kill (struct intr_frame *f)
      the kernel.  Real Unix-like operating systems pass most
      exceptions back to the process via signals, but we don't
      implement them. */
-     
+
   /* The interrupt frame's code segment value tells us where the
      exception originated. */
   switch (f->cs)
@@ -112,7 +114,7 @@ kill (struct intr_frame *f)
       printf ("%s: dying due to interrupt %#04x (%s).\n",
               thread_name (), f->vec_no, intr_name (f->vec_no));
       intr_dump_frame (f);
-      thread_exit (); 
+      thread_exit ();
 
     case SEL_KCSEG:
       /* Kernel's code segment, which indicates a kernel bug.
@@ -120,10 +122,10 @@ kill (struct intr_frame *f)
          may cause kernel exceptions--but they shouldn't arrive
          here.)  Panic the kernel to make the point.  */
       intr_dump_frame (f);
-      PANIC ("Kernel bug - unexpected interrupt in kernel"); 
+      PANIC ("Kernel bug - unexpected interrupt in kernel");
 
     default:
-      /* Some other code segment?  
+      /* Some other code segment?
          Shouldn't happen.  Panic the kernel. */
       printf ("Interrupt %#04x (%s) in unknown segment %04x\n",
              f->vec_no, intr_name (f->vec_no), f->cs);
@@ -143,7 +145,7 @@ kill (struct intr_frame *f)
    description of "Interrupt 14--Page Fault Exception (#PF)" in
    [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 static void
-page_fault (struct intr_frame *f) 
+page_fault (struct intr_frame *f)
 {
   bool not_present;  /* True: not-present page, false: writing r/o page. */
   bool write;        /* True: access was write, false: access was read. */
@@ -162,9 +164,22 @@ page_fault (struct intr_frame *f)
   /* Turn interrupts back on (they were only off so that we could
      be assured of reading CR2 before it changed). */
   intr_enable ();
-lock_acquire (&thread_current()->page_lock);
-struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
+  /* Determine cause. */
+  not_present = (f->error_code & PF_P) == 0;
+  write = (f->error_code & PF_W) != 0;
+  user = (f->error_code & PF_U) != 0;
+  lock_acquire (&thread_current()->page_lock);
 
+  struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
+
+  /* check if it is a stack access */
+  uint32_t esp = f->esp;
+  if(page == NULL && is_stack_address(fault_addr, esp)) {
+    /* grow the stack */
+    grow_stack(pg_round_down(fault_addr));
+    lock_release (&thread_current()->page_lock);
+    return;
+  }
 
   if(page != NULL) { // it is a fake page fault
     switch (page->page_status) {
@@ -175,7 +190,7 @@ struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
       case IN_SWAP:
         void *kpage = swapBackPage(page->page_address);
         if (!install_page(page->page_address, kpage, page->writable)) {
-          syscall_exit(STATUS_FAIL);
+          PANIC ("install page failed\n");
         }
         pagedir_set_dirty(thread_current()->pagedir, page->page_address, page->dirty);
         lock_release (&thread_current()->page_lock);
@@ -202,11 +217,6 @@ lock_release (&thread_current()->page_lock);
   /* Count page faults. */
   page_fault_cnt++;
 
-  /* Determine cause. */
-  not_present = (f->error_code & PF_P) == 0;
-  write = (f->error_code & PF_W) != 0;
-  user = (f->error_code & PF_U) != 0;
-
   /* check if the memory is unmapped */
   if (!is_valid_ptr (fault_addr)) {
       syscall_exit (STATUS_FAIL);
@@ -221,10 +231,42 @@ lock_release (&thread_current()->page_lock);
           user ? "user" : "kernel");
   kill (f);
 }
+/* check it is a stack access, we need to grow the stack */
+static bool
+is_stack_address (void *fault_addr, void *esp){
+  struct thread *curr = thread_current ();
+  if (fault_addr >= PHYS_BASE || fault_addr < PHYS_BASE - STACK_MAX) {
+    return false;
+  }
+  if (esp - PUSH_A_SIZE == fault_addr || esp - PUSH_SIZE == fault_addr || esp <= fault_addr) {
+    return true;
+  }
+  return false;
+}
 
+/* grow the stack */
+static void
+grow_stack (void *round_addr) {
+  struct thread *curr = thread_current ();
+  if(curr->stack_size + PGSIZE >= STACK_MAX){
+    lock_release (&thread_current()->page_lock);
+    syscall_exit(STATUS_FAIL);
+  }
+  /* allocate a new page */
+  uint8_t *kpage = palloc_get_page (PAL_USER);
+  /* add the page to the supplemental page table */
+  pageTableAdding(round_addr, kpage, IN_FRAME);
+  /* add the page to the process's address space */
+  if (!install_page (round_addr, kpage, true)) {
+    palloc_free_page (kpage);
+    PANIC("install page failed");
+  }
+  /* update the stack size */
+  curr->stack_size += PGSIZE;
+}
 
 /* load single page */
-static bool
+static void
 load_page(struct file *file, off_t ofs, uint8_t *upage,
           uint32_t page_read_bytes, uint32_t page_zero_bytes, bool writable) {
 
@@ -249,7 +291,7 @@ load_page(struct file *file, off_t ofs, uint8_t *upage,
         {
           palloc_free_page (kpage);
           free (page->lazy_file);
-          return false; 
+          PANIC ("install page failed\n");
         }  
          page->kernel_address = kpage;
         
@@ -263,20 +305,9 @@ load_page(struct file *file, off_t ofs, uint8_t *upage,
   lock_acquire(&file_lock);
   if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes) {
    lock_release(&file_lock);
-   return false;
+   PANIC("load page failed\n");
   }
   lock_release(&file_lock);
   memset(kpage + page_read_bytes, 0, page_zero_bytes);
-  return true;
 }
 
-static bool
-install_page (void *upage, void *kpage, bool writable)
-{
-  struct thread *t = thread_current ();
-
-  /* Verify that there's not already a page at that virtual
-     address, then map our page there. */
-  return (pagedir_get_page (t->pagedir, upage) == NULL
-          && pagedir_set_page (t->pagedir, upage, kpage, writable));
-}

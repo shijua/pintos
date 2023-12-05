@@ -41,6 +41,7 @@ typedef struct page_elem {
    bool writable;
    bool dirty;
    struct lock lock;
+   bool is_pin;
 } *page_elem;
 
 void pageTableAdding (const uint32_t, const uint32_t, enum page_status);
@@ -48,5 +49,6 @@ void page_clear (const uint32_t);
 hash_action_func page_free_action;
 void *swapBackPage (const uint32_t page_address);
 page_elem pageLookUp (const uint32_t page_address);
+bool page_set_pin (uint32_t page_address, bool pin);
 
 #endif

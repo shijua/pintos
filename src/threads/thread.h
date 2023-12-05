@@ -33,7 +33,7 @@ struct lock file_lock;
 struct lock child_lock;
 /* lock use for frame */
 struct lock frame_lock;
-/* lock used for ensure check whether process 
+/* lock used for ensure check whether process
    is created successfully before return tid */
 struct semaphore execute_sema;
 #endif
@@ -108,6 +108,8 @@ struct thread
     struct list_elem elem;              /* List element. */
     struct hash supplemental_page_table; /* supplemental page table */
     struct lock page_lock;             /* lock for page table */
+    int stack_size;                     /* the size of stack */
+    void *esp;                          /* the esp of thread store it handle case in task 3 stack growth */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

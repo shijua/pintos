@@ -14,12 +14,10 @@ struct frame_elem{
     struct hash_elem hash_e;
     uint32_t frame_addr;
     struct page_elem* ppage;
-    bool is_pin;
 };
 
 void frame_init();
 void frame_add (uint32_t, struct page_elem *);
-void frame_set_pin (uint32_t kernel_addr, bool pin);
 void frame_free (uint32_t);
 hash_action_func frame_free_action;
 void frame_swap ();
