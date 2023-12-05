@@ -17,6 +17,7 @@
 #include "vm/pageTable.h"
 #include "vm/frame.h"
 #include "threads/palloc.h"
+#include "userprog/exception.h"
 
 static void syscall_handler (struct intr_frame *);
 static void syscall_halt (void);
@@ -242,6 +243,7 @@ syscall_open (const char *file) {
   pin_frame (file);
   struct file *f = filesys_open (file);
   if (f == NULL) {
+    lock_release (&file_lock);
     return -1;
   } else {
     struct File_info *info = malloc (sizeof (struct File_info));
@@ -420,19 +422,21 @@ static void mmap(struct intr_frame *f){
     f->eax = -1;
     return;
   }
+  // TODO doing sync check
+  lock_acquire(&file_lock);
   struct file *file = file_reopen(find -> file);
+  lock_release(&file_lock);
   struct mmapElem *adding = malloc(sizeof(struct mmapElem));
-  if(!load_mmap(file, address, adding)){
+  if(is_stack_address(address, f->esp) || !load_mmap(file, address, adding)){
     free(adding);
     f->eax = -1;
     return;
   }
   f->eax = mmapInt;
   adding->file = file;
-  adding->mapid = mmapInt;
+  adding->mapid = mmapInt++;
   adding->page_address = address;
   hash_insert(&thread_current()->mmap_hash, &adding->elem);
-  mmapInt++;
 }
 
 void
@@ -452,7 +456,9 @@ munmapHelper(struct hash_elem *found_elem, void *aux UNUSED)
     pagedir_clear_page(thread_current()->pagedir, page);
     page_clear(page);
   }
+  lock_acquire(&file_lock);
   file_close(found->file);
+  lock_release(&file_lock);
   free(found);
 }
 
@@ -469,19 +475,19 @@ static void unmmap(struct intr_frame *f)
 }
 
 static void pin_frame (void *uaddr) {
-  // lock_acquire(&thread_current()->page_lock);
-  // if (!page_set_pin ((uint32_t) pg_round_down (uaddr), true)) {
-  //   lock_release(&thread_current()->page_lock);
-  //   syscall_exit (STATUS_FAIL);
-  // }
-  // lock_release(&thread_current()->page_lock);
+  lock_acquire(&thread_current()->page_lock);
+  if (!page_set_pin ((uint32_t) pg_round_down (uaddr), true)) {
+    lock_release(&thread_current()->page_lock);
+    syscall_exit (STATUS_FAIL);
+  }
+  lock_release(&thread_current()->page_lock);
 }
 
 static void unpin_frame (void *uaddr) {
-  // lock_acquire(&thread_current()->page_lock);
-  // if (!page_set_pin ((uint32_t) pg_round_down (uaddr), false)) {
-  //   lock_release(&thread_current()->page_lock);
-  //   syscall_exit (STATUS_FAIL);
-  // }
-  // lock_release(&thread_current()->page_lock);
+  lock_acquire(&thread_current()->page_lock);
+  if (!page_set_pin ((uint32_t) pg_round_down (uaddr), false)) {
+    lock_release(&thread_current()->page_lock);
+    syscall_exit (STATUS_FAIL);
+  }
+  lock_release(&thread_current()->page_lock);
 }

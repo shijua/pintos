@@ -54,6 +54,7 @@ page_clear (const uint32_t page_address) {
     page_elem removing = pageLookUp(page_address);
     ASSERT (removing != NULL);
     switch (removing->page_status) {
+        // TODO mmap
       case IN_FRAME:
           frame_free (removing->kernel_address);
           break;

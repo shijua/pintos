@@ -250,9 +250,10 @@ process_exit (void)
   }
   hash_destroy (&cur -> file_table, free_struct_file);
   lock_release (&file_lock);
-  //lock_acquire (&cur->page_lock);
+  lock_acquire (&cur->page_lock);
   hash_destroy (&cur -> supplemental_page_table, page_free_action);
-  //lock_release (&cur->page_lock);
+  lock_release (&cur->page_lock);
+  // hash_destroy(&cur -> mmap_hash, free_struct_mmap);
   free_child_list (&thread_current() -> child_list);
 
   /* Destroy the current process's page directory and switch back
@@ -561,10 +562,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (pagedir_get_page (thread_current ()->pagedir, upage) != NULL) {
         pagedir_clear_page (thread_current ()->pagedir, upage);
       }
-
       struct page_elem *page = pageLookUp(upage);
-      page->page_status = IN_FILE;
+      lock_release (&thread_current() -> page_lock);
 
+      page->page_status = IN_FILE;
+      
       page->lazy_file = malloc (sizeof (struct lazy_file));
       page->lazy_file->file = file;
       page->lazy_file->offset = ofs;
@@ -573,7 +575,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       page->writable = writable;
       page->swapped_id = -1;
       ofs += page_read_bytes;
-      lock_release (&thread_current() -> page_lock);
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
@@ -582,11 +583,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   return true;
 }
 
+// TODO move it into syscall
 bool
 load_mmap(struct file *file, uint8_t *upage, struct mmapElem *mmapElem)
 {
   uint32_t length = file_length(file);
-  if((length == 0 || pg_ofs(upage) != 0) || upage == NULL) {
+  if (length == 0 || pg_ofs(upage) != 0 || upage == NULL) {
     return false;
   }
   uint32_t read_bytes = length;
@@ -601,6 +603,7 @@ load_mmap(struct file *file, uint8_t *upage, struct mmapElem *mmapElem)
 
       lock_acquire (&thread_current() -> page_lock);
       if (pageLookUp(upage) != NULL) {
+        lock_release (&thread_current() -> page_lock);
         return false;
       }
       lock_release (&thread_current() -> page_lock);

@@ -19,7 +19,6 @@
 static void load_page(struct file *file, off_t ofs, uint8_t *upage,
           uint32_t page_read_bytes, uint32_t page_zero_bytes, bool writable);
 
-static bool is_stack_address (void *fault_addr, void *esp);
 static void grow_stack (void *fault_addr);
 
 // function used to check if pointer mapped to a unmapped memory
@@ -183,6 +182,7 @@ page_fault (struct intr_frame *f)
 
   if(page != NULL) { // it is a fake page fault
     switch (page->page_status) {
+      // TODO consider IN_MMAP
       case IN_FRAME:
         lock_release (&thread_current()->page_lock);
         syscall_exit(STATUS_FAIL);
@@ -232,8 +232,8 @@ lock_release (&thread_current()->page_lock);
   kill (f);
 }
 /* check it is a stack access, we need to grow the stack */
-static bool
-is_stack_address (void *fault_addr, void *esp){
+bool
+is_stack_address (void *fault_addr, void *esp) {
   struct thread *curr = thread_current ();
   if (fault_addr >= PHYS_BASE || fault_addr < PHYS_BASE - STACK_MAX) {
     return false;
