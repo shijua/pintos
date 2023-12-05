@@ -15,7 +15,7 @@ bool page_less_func (const struct hash_elem *a, const struct hash_elem *b, void 
   return getPageElem(a)->page_address <  getPageElem(b)->page_address;
 }
 
-void pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enum page_status status) {
+page_elem pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enum page_status status) {
     ASSERT (pageLookUp(page_address) == NULL); // make sure this page is not in the supplemental page table
     page_elem adding = malloc(sizeof(struct page_elem));
     if(adding == NULL) {
@@ -26,9 +26,10 @@ void pageTableAdding (const uint32_t page_address, const uint32_t kernel_address
     adding->kernel_address = kernel_address;
     adding->page_status = status;
     adding->swapped_id = -1;
-    adding->lock = thread_current()->page_lock;
+    adding->lock = &thread_current()->page_lock;
     adding->is_pin = false;
     hash_insert(&thread_current()->supplemental_page_table, &adding->elem);
+    return adding;
 }
 
 void
@@ -42,7 +43,7 @@ page_free_action (struct hash_elem *element, void *aux UNUSED) {
       case IN_SWAP:
           swap_drop (removing->swapped_id);
           break;
-      case IN_FILE:
+      default:
           free (removing->lazy_file);
           break;
     }
@@ -61,7 +62,7 @@ page_clear (const uint32_t page_address) {
       case IN_SWAP:
           swap_drop (removing->swapped_id);
           break;
-      case IN_FILE:
+      default:
           free (removing->lazy_file);
           break;
     }

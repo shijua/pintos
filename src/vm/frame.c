@@ -5,6 +5,10 @@
 #include "threads/malloc.h"
 #include "userprog/pagedir.h"
 #include "threads/palloc.h"
+#include "filesys/file.h"
+#include "threads/vaddr.h"
+
+static struct lock frame_lock;
 static struct list frame_list;
 static struct hash frame_hash;
 static struct list_elem *frame_pointer;
@@ -13,9 +17,10 @@ static hash_less_func frame_less_func;
 
 void
 frame_init() {
-    list_init(&frame_list);
-    hash_init(&frame_hash, frame_hash_func, frame_less_func, NULL);
-    frame_pointer = list_tail(&frame_list);
+  list_init(&frame_list);
+  hash_init(&frame_hash, frame_hash_func, frame_less_func, NULL);
+  frame_pointer = list_tail(&frame_list);
+  lock_init(&frame_lock);
 }
 
 unsigned
@@ -102,20 +107,29 @@ frame_swap () {
     PANIC("frame_swap: frame_pointer is NULL");
   }
   // search until it is not pinned and not accessed
-  while(getFrameListElem(frame_pointer)->ppage->is_pin || pagedir_is_accessed(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address) == true){
-    pagedir_set_accessed(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address, false);
-    frame_index_loop();
-  }
   struct frame_elem *frame_elem = getFrameListElem(frame_pointer);
+  while(frame_elem->ppage->is_pin ||
+   pagedir_is_accessed(getPd(frame_pointer), 
+                      (void *) frame_elem->ppage->page_address) == true){
+    pagedir_set_accessed(getPd(frame_pointer), (void *) frame_elem->ppage->page_address, false);
+    frame_index_loop();
+    frame_elem = getFrameListElem(frame_pointer);
+  }
   // bool locked_by_own = false;
   // if (!lock_held_by_current_thread(&frame_elem->ppage->lock) && frame_elem->ppage != NULL) {
   //     lock_acquire(&frame_elem->ppage->lock);
   //     locked_by_own = true;
   // }
-  frame_elem->ppage->page_status = IN_SWAP;
-  frame_elem->ppage->swapped_id = swap_out((void *) frame_elem->frame_addr);
-  frame_elem->ppage->writable = pagedir_is_writable(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address);
-  frame_elem->ppage->dirty = pagedir_is_dirty(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address);
+  if(frame_elem->ppage->page_status == IS_MMAP) {
+    lock_acquire(&file_lock);
+    file_write_at(frame_elem->ppage->lazy_file->file, (void *)frame_elem->frame_addr, PGSIZE, frame_elem->ppage->lazy_file->offset);
+    lock_release(&file_lock);
+  } else{
+    frame_elem->ppage->page_status = IN_SWAP;
+    frame_elem->ppage->swapped_id = swap_out((void *) frame_elem->frame_addr);
+    frame_elem->ppage->writable = pagedir_is_writable(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address);
+    frame_elem->ppage->dirty = pagedir_is_dirty(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address);
+  }
   /* page need be reallocate later as kernel may request and will not add to the frame */
   palloc_free_page((void *) frame_elem->frame_addr);
   pagedir_clear_page (frame_elem->ppage->pd, (void *) frame_elem->ppage->page_address);

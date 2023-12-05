@@ -596,13 +596,13 @@ load_mmap(struct file *file, uint8_t *upage, struct mmapElem *mmapElem)
   uint8_t *oldUpage = upage;
   off_t ofs = 0;
   int page_num = 0;
-  while (read_bytes > 0 || zero_bytes > 0) 
+  while (read_bytes > 0) 
     {
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
+      
       lock_acquire (&thread_current() -> page_lock);
-      if (pageLookUp(upage) != NULL) {
+      if (pageLookUp(oldUpage) != NULL) {
         lock_release (&thread_current() -> page_lock);
         return false;
       }
@@ -610,12 +610,27 @@ load_mmap(struct file *file, uint8_t *upage, struct mmapElem *mmapElem)
 
       ofs += page_read_bytes;
       read_bytes -= page_read_bytes;
-      zero_bytes -= page_zero_bytes;
-      upage += PGSIZE;
+      oldUpage += PGSIZE;
       page_num++;
     }
   mmapElem->page_num = page_num;
-  return load_segment(file, 0, oldUpage, length, PGSIZE - (length % PGSIZE), true);
+  for(int i = 0; i < page_num; i++) {
+    struct page_elem *page = pageTableAdding(upage + i*PGSIZE, NULL, IS_MMAP);
+    page->lazy_file = malloc (sizeof (struct lazy_file));
+    page->lazy_file->file = file;
+    page->lazy_file->offset = i*PGSIZE;
+    if(i == page_num - 1) {
+      page->lazy_file->read_bytes = PGSIZE - zero_bytes;
+      page->lazy_file->zero_bytes = zero_bytes;
+    } else{
+      page->lazy_file->read_bytes = PGSIZE;
+      page->lazy_file->zero_bytes = 0;
+    }
+    page->writable = true;
+    page->swapped_id = -1;
+  }
+
+  return load_segment(file, 0, upage, length, PGSIZE - (length % PGSIZE), true);
 }
 
 /* Create a minimal stack by mapping a zeroed page at the top of

@@ -195,7 +195,8 @@ page_fault (struct intr_frame *f)
         pagedir_set_dirty(thread_current()->pagedir, page->page_address, page->dirty);
         lock_release (&thread_current()->page_lock);
         break;
-      case IN_FILE:
+      
+      default:
         struct lazy_file *file = page->lazy_file;
         /* if the lock is not released when coming to interrupt */
         bool is_locked = false;
