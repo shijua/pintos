@@ -47,6 +47,8 @@ static void check_validation_str (const char **vaddr);
 /* function used for pin and unpin frame */
 static void pin_frame (void *uaddr);
 static void unpin_frame (void *uaddr);
+static void pin_frame_file (void *uaddr, int size);
+static void unpin_frame_file (void *uaddr, int size);
 
 unsigned 
 file_hash_func (const struct hash_elem *element, void *aux UNUSED) 
@@ -216,22 +218,22 @@ syscall_wait (pid_t pid) {
 /* Creates a new ﬁle called ﬁle initially initial size bytes in size. */
 static int
 syscall_create (const char *file, unsigned initial_size) {
-  lock_acquire (&file_lock);
   pin_frame (file);
+  lock_acquire (&file_lock);
   bool success = filesys_create (file, initial_size);
-  unpin_frame (file);
   lock_release (&file_lock);
+  unpin_frame (file);
   return success;
 }
 
 /* Deletes the ﬁle called ﬁle. Returns true if successful, false otherwise. */
 static int
 syscall_remove (const char *file) {
-  lock_acquire (&file_lock);
   pin_frame (file);
+  lock_acquire (&file_lock);
   bool success = filesys_remove (file);
-  unpin_frame (file);
   lock_release (&file_lock);
+  unpin_frame (file);
   return success;
 }
 
@@ -239,8 +241,8 @@ syscall_remove (const char *file) {
   “ﬁle descriptor” (fd), or -1 if the ﬁle could not be opened. */
 static int
 syscall_open (const char *file) {
-  lock_acquire (&file_lock);
   pin_frame (file);
+  lock_acquire (&file_lock);
   struct file *f = filesys_open (file);
   if (f == NULL) {
     lock_release (&file_lock);
@@ -248,16 +250,16 @@ syscall_open (const char *file) {
   } else {
     struct File_info *info = malloc (sizeof (struct File_info));
     if (info == NULL) {
-      unpin_frame (file);
       lock_release (&file_lock);
+      unpin_frame (file);
       syscall_exit (STATUS_FAIL);
     }
     info->fd = thread_current ()->fd;
     info->file = f;
     hash_insert(&thread_current ()->file_table, &info->elem);
   }
-  unpin_frame (file);
   lock_release (&file_lock);
+  unpin_frame (file);
   return thread_current ()->fd++;
 }
 
@@ -279,7 +281,7 @@ syscall_filesize (int fd) {
 static int
 syscall_read (int fd, void *buffer, unsigned size) {
   /* Reads size bytes from the open file fd into buffer */
-  pin_frame (buffer);
+  pin_frame_file (buffer, size);
   if (fd == 0) {
     /* Standard input reading */
     for (unsigned i = 0; i < size; i++) {
@@ -290,13 +292,13 @@ syscall_read (int fd, void *buffer, unsigned size) {
   lock_acquire (&file_lock);
   struct File_info *info = get_file_info (fd);
   if (CHECK_NULL_FILE (info->file)) {
-    unpin_frame (buffer);
     lock_release (&file_lock);
+    unpin_frame (buffer);
     syscall_exit (STATUS_FAIL);
   }
   int read_size = file_read (info->file, buffer, size);
-  unpin_frame (buffer);
   lock_release (&file_lock);
+  unpin_frame_file (buffer, size);
   return read_size;
 }
 
@@ -304,7 +306,7 @@ syscall_read (int fd, void *buffer, unsigned size) {
 static int
 syscall_write (int fd, void *buffer, unsigned size) {
   /* Writes size bytes from buffer to the open file fd */
-  pin_frame (buffer);
+  pin_frame_file (buffer, size);
   if (fd == 1) {
     /* Standard output writing */
     putbuf (buffer, size);
@@ -313,13 +315,13 @@ syscall_write (int fd, void *buffer, unsigned size) {
   lock_acquire (&file_lock);
   struct File_info *info = get_file_info (fd);
   if (CHECK_NULL_FILE (info->file)) {
-    unpin_frame (buffer);
     lock_release (&file_lock);
+    unpin_frame (buffer);
     syscall_exit (STATUS_FAIL);
   }
   int write_size = file_write (info->file, buffer, size);
-  unpin_frame (buffer);
   lock_release (&file_lock);
+  unpin_frame_file (buffer, size);
   return write_size;
 }
 
@@ -417,13 +419,14 @@ static void check_validation_rw (const void *buffer, unsigned size) {
 static void mmap(struct intr_frame *f){
   int fd = *(int *)(f->esp + 4);
   uint8_t *address = *(uint8_t **)(f->esp + 8);
+  lock_acquire(&file_lock);
   struct File_info *find = get_file_info(fd);
   if(find == NULL){
     f->eax = -1;
     return;
   }
   // TODO doing sync check
-  lock_acquire(&file_lock);
+  
   struct file *file = file_reopen(find -> file);
   lock_release(&file_lock);
   struct mmapElem *adding = malloc(sizeof(struct mmapElem));
@@ -444,19 +447,19 @@ munmapHelper(struct hash_elem *found_elem, void *aux UNUSED)
 {
   struct mmapElem *found = hash_entry(found_elem, struct mmapElem, elem);
   int n = found->page_num;
+  lock_acquire(&file_lock);
   for(int i = 0; i < n; i++){
     uint8_t *page = found->page_address + i*PGSIZE;
     if(pagedir_get_page(thread_current()->pagedir, page) != NULL
       && pagedir_is_dirty(thread_current()->pagedir, page)) {
-        lock_acquire(&file_lock);
+        // lock_acquire(&file_lock);
+        // TODO
         int k = file_write_at(found->file, page, PGSIZE, i*PGSIZE);
-        lock_release(&file_lock);
+        // lock_release(&file_lock);
     }
-    
     pagedir_clear_page(thread_current()->pagedir, page);
     page_clear(page);
   }
-  lock_acquire(&file_lock);
   file_close(found->file);
   lock_release(&file_lock);
   free(found);
@@ -474,20 +477,42 @@ static void unmmap(struct intr_frame *f)
   munmapHelper(find, NULL);
 }
 
+static void pin_frame_file (void *uaddr, int size) {
+  lock_acquire(&page_lock);
+  for(int i = pg_round_down(uaddr); i < pg_round_up(size+uaddr+1); i+=PGSIZE){
+    if (!page_set_pin ((uint32_t) i, true)) {
+      lock_release(&page_lock);
+      syscall_exit (STATUS_FAIL);
+    }
+  }
+  lock_release(&page_lock);
+}
+
+static void unpin_frame_file (void *uaddr, int size) {
+  lock_acquire(&page_lock);
+  for(int i = pg_round_down(uaddr); i < pg_round_up(size+uaddr+1); i+=PGSIZE){
+    if (!page_set_pin ((uint32_t) i, true)) {
+      lock_release(&page_lock);
+      syscall_exit (STATUS_FAIL);
+    }
+  }
+  lock_release(&page_lock);
+}
+
 static void pin_frame (void *uaddr) {
-  lock_acquire(&thread_current()->page_lock);
+  lock_acquire(&page_lock);
   if (!page_set_pin ((uint32_t) pg_round_down (uaddr), true)) {
-    lock_release(&thread_current()->page_lock);
+    lock_release(&page_lock);
     syscall_exit (STATUS_FAIL);
   }
-  lock_release(&thread_current()->page_lock);
+  lock_release(&page_lock);
 }
 
 static void unpin_frame (void *uaddr) {
-  lock_acquire(&thread_current()->page_lock);
+  lock_acquire(&page_lock);
   if (!page_set_pin ((uint32_t) pg_round_down (uaddr), false)) {
-    lock_release(&thread_current()->page_lock);
+    lock_release(&page_lock);
     syscall_exit (STATUS_FAIL);
   }
-  lock_release(&thread_current()->page_lock);
+  lock_release(&page_lock);
 }

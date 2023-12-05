@@ -115,11 +115,11 @@ frame_swap () {
     frame_index_loop();
     frame_elem = getFrameListElem(frame_pointer);
   }
-  // bool locked_by_own = false;
-  // if (!lock_held_by_current_thread(&frame_elem->ppage->lock) && frame_elem->ppage != NULL) {
-  //     lock_acquire(&frame_elem->ppage->lock);
-  //     locked_by_own = true;
-  // }
+  bool locked_by_own = false;
+  if (!lock_held_by_current_thread(&page_lock) && frame_elem->ppage != NULL) {
+      lock_acquire(&page_lock);
+      locked_by_own = true;
+  }
   if(frame_elem->ppage->page_status == IS_MMAP) {
     lock_acquire(&file_lock);
     file_write_at(frame_elem->ppage->lazy_file->file, (void *)frame_elem->frame_addr, PGSIZE, frame_elem->ppage->lazy_file->offset);
@@ -133,9 +133,9 @@ frame_swap () {
   /* page need be reallocate later as kernel may request and will not add to the frame */
   palloc_free_page((void *) frame_elem->frame_addr);
   pagedir_clear_page (frame_elem->ppage->pd, (void *) frame_elem->ppage->page_address);
-  // if (locked_by_own) {
-  //   lock_release(&frame_elem->ppage->lock);
-  // }
+  if (locked_by_own) {
+    lock_release(&page_lock);
+  }
   frame_free(frame_elem->frame_addr);
   frame_index_loop();
   lock_release(&frame_lock);

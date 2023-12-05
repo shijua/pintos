@@ -167,7 +167,7 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-  lock_acquire (&thread_current()->page_lock);
+  lock_acquire (&page_lock);
 
   struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
 
@@ -176,7 +176,7 @@ page_fault (struct intr_frame *f)
   if(page == NULL && is_stack_address(fault_addr, esp)) {
     /* grow the stack */
     grow_stack(pg_round_down(fault_addr));
-    lock_release (&thread_current()->page_lock);
+    lock_release (&page_lock);
     return;
   }
 
@@ -184,7 +184,7 @@ page_fault (struct intr_frame *f)
     switch (page->page_status) {
       // TODO consider IN_MMAP
       case IN_FRAME:
-        lock_release (&thread_current()->page_lock);
+        lock_release (&page_lock);
         syscall_exit(STATUS_FAIL);
         break;
       case IN_SWAP:
@@ -193,7 +193,7 @@ page_fault (struct intr_frame *f)
           PANIC ("install page failed\n");
         }
         pagedir_set_dirty(thread_current()->pagedir, page->page_address, page->dirty);
-        lock_release (&thread_current()->page_lock);
+        lock_release (&page_lock);
         break;
       
       default:
@@ -209,12 +209,12 @@ page_fault (struct intr_frame *f)
          if (is_locked) {
             lock_acquire (&file_lock);
          }
-         lock_release (&thread_current()->page_lock);
+         lock_release (&page_lock);
         break;
     }
     return;
   }
-lock_release (&thread_current()->page_lock);
+lock_release (&page_lock);
   /* Count page faults. */
   page_fault_cnt++;
 
@@ -250,7 +250,7 @@ static void
 grow_stack (void *round_addr) {
   struct thread *curr = thread_current ();
   if(curr->stack_size + PGSIZE >= STACK_MAX){
-    lock_release (&thread_current()->page_lock);
+    lock_release (&page_lock);
     syscall_exit(STATUS_FAIL);
   }
   /* allocate a new page */
@@ -277,7 +277,6 @@ load_page(struct file *file, off_t ofs, uint8_t *upage,
    uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
    page_elem page = pageLookUp(upage);
    ASSERT (page != NULL);
-   page->page_status = IN_FRAME;
    page->lazy_file = NULL;
    free (page->lazy_file);
 
@@ -294,6 +293,7 @@ load_page(struct file *file, off_t ofs, uint8_t *upage,
           free (page->lazy_file);
           PANIC ("install page failed\n");
         }  
+        page->page_status = IN_FRAME;
          page->kernel_address = kpage;
         
       } else {

@@ -250,9 +250,9 @@ process_exit (void)
   }
   hash_destroy (&cur -> file_table, free_struct_file);
   lock_release (&file_lock);
-  lock_acquire (&cur->page_lock);
+  lock_acquire (&page_lock);
   hash_destroy (&cur -> supplemental_page_table, page_free_action);
-  lock_release (&cur->page_lock);
+  lock_release (&page_lock);
   // hash_destroy(&cur -> mmap_hash, free_struct_mmap);
   free_child_list (&thread_current() -> child_list);
 
@@ -552,7 +552,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
-      lock_acquire (&thread_current() -> page_lock);
+      lock_acquire (&page_lock);
       /* doing lazy load */
       if (pageLookUp(upage) == NULL) {
         pageTableAdding(upage, NULL, IN_FILE);
@@ -563,7 +563,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         pagedir_clear_page (thread_current ()->pagedir, upage);
       }
       struct page_elem *page = pageLookUp(upage);
-      lock_release (&thread_current() -> page_lock);
+      lock_release (&page_lock);
 
       page->page_status = IN_FILE;
       
@@ -601,12 +601,12 @@ load_mmap(struct file *file, uint8_t *upage, struct mmapElem *mmapElem)
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
-      lock_acquire (&thread_current() -> page_lock);
+      lock_acquire (&page_lock);
       if (pageLookUp(oldUpage) != NULL) {
-        lock_release (&thread_current() -> page_lock);
+        lock_release (&page_lock);
         return false;
       }
-      lock_release (&thread_current() -> page_lock);
+      lock_release (&page_lock);
 
       ofs += page_read_bytes;
       read_bytes -= page_read_bytes;
@@ -643,7 +643,7 @@ setup_stack (void **esp)
   bool success = false;
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-  lock_acquire (&thread_current() -> page_lock);
+  lock_acquire (&page_lock);
   pageTableAdding (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, IN_FRAME);
   success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
   if (success) {
@@ -654,7 +654,7 @@ setup_stack (void **esp)
     // TODO page need to be free if not successful
 
   }
-  lock_release (&thread_current() -> page_lock);
+  lock_release (&page_lock);
   return success;
 }
 
