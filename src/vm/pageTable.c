@@ -37,15 +37,20 @@ page_free_action (struct hash_elem *element, void *aux UNUSED) {
     page_elem removing = getPageElem(element);
     ASSERT (removing != NULL);
     switch (removing->page_status) {
-      case IN_FRAME:
-          frame_free (removing->kernel_address);
-          break;
-      case IN_SWAP:
-          swap_drop (removing->swapped_id);
-          break;
-      default:
-          free (removing->lazy_file);
-          break;
+        case IN_FRAME:
+            frame_free (removing->kernel_address);
+            break;
+        case IN_SWAP:
+            swap_drop (removing->swapped_id);
+            break;
+        case IN_FILE:
+            free (removing->lazy_file);
+            break;
+        case IS_MMAP:
+            free (removing->lazy_file);
+            if (removing->kernel_address != NULL) {
+                frame_free (removing->kernel_address);
+            }
     }
     free(removing);
 };
@@ -53,21 +58,8 @@ page_free_action (struct hash_elem *element, void *aux UNUSED) {
 void
 page_clear (const uint32_t page_address) {
     page_elem removing = pageLookUp(page_address);
-    ASSERT (removing != NULL);
-    switch (removing->page_status) {
-        // TODO mmap
-      case IN_FRAME:
-          frame_free (removing->kernel_address);
-          break;
-      case IN_SWAP:
-          swap_drop (removing->swapped_id);
-          break;
-      default:
-          free (removing->lazy_file);
-          break;
-    }
     hash_delete(&thread_current()->supplemental_page_table, &removing->elem);
-    free(removing);
+    page_free_action(&removing->elem, NULL);
 }
 
 

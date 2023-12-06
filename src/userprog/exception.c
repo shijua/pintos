@@ -16,9 +16,6 @@
 #include "userprog/process.h"
 #include "threads/malloc.h"
 
-static void load_page(struct file *file, off_t ofs, uint8_t *upage,
-          uint32_t page_read_bytes, uint32_t page_zero_bytes, bool writable);
-
 static void grow_stack (void *fault_addr);
 
 // function used to check if pointer mapped to a unmapped memory
@@ -197,18 +194,17 @@ page_fault (struct intr_frame *f)
         break;
       
       default:
-        struct lazy_file *file = page->lazy_file;
         /* if the lock is not released when coming to interrupt */
-        bool is_locked = false;
-         if (file_lock.holder == thread_current()) {
-            lock_release (&file_lock);
-            is_locked = true;
-         }
-        load_page(file->file, file->offset, page->page_address, file->read_bytes, file->zero_bytes, page->writable);
+        // bool is_locked = false;
+        //  if (file_lock.holder == thread_current()) {
+        //     lock_release (&file_lock);
+        //     is_locked = true;
+        //  }
+        load_page(page->lazy_file, page);
         // lock back when finish loading
-         if (is_locked) {
-            lock_acquire (&file_lock);
-         }
+        //  if (is_locked) {
+        //     lock_acquire (&file_lock);
+        //  }
          lock_release (&page_lock);
         break;
     }
@@ -267,19 +263,16 @@ grow_stack (void *round_addr) {
 }
 
 /* load single page */
-static void
-load_page(struct file *file, off_t ofs, uint8_t *upage,
-          uint32_t page_read_bytes, uint32_t page_zero_bytes, bool writable) {
+void
+load_page(struct lazy_file *Lfile, struct page_elem *page) {
 
-   file_seek(file, ofs);
    /* Check if virtual page already allocated */
    struct thread *t = thread_current();
-   uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
-   page_elem page = pageLookUp(upage);
+   uint8_t *kpage = pagedir_get_page (t->pagedir, page->page_address);
    ASSERT (page != NULL);
-   page->lazy_file = NULL;
-   free (page->lazy_file);
-
+   if (page->page_status != IS_MMAP) {
+      page->page_status = IN_FRAME;
+   }
    if (kpage == NULL) {
         
         /* Get a new page of memory. */
@@ -287,28 +280,26 @@ load_page(struct file *file, off_t ofs, uint8_t *upage,
         ASSERT (kpage != NULL);
 
         /* Add the page to the process's address space. */
-        if (!install_page (upage, kpage, writable)) 
+        if (!install_page (page->page_address, kpage, page->writable)) 
         {
           palloc_free_page (kpage);
-          free (page->lazy_file);
           PANIC ("install page failed\n");
         }  
-        page->page_status = IN_FRAME;
          page->kernel_address = kpage;
         
       } else {
         /* Check if writable flag for the page should be updated */
-        if(writable && !pagedir_is_writable(t->pagedir, upage)) {
-          pagedir_set_writable(t->pagedir, upage, writable); 
+        if(page->writable && !pagedir_is_writable(t->pagedir, page->page_address)) {
+          pagedir_set_writable(t->pagedir, page->page_address, page->writable); 
         }
    }
   /* Load data into the page. */
   lock_acquire(&file_lock);
-  if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes) {
+  if (file_read_at(Lfile->file, kpage, Lfile->read_bytes, Lfile->offset) != (int) Lfile->read_bytes) {
    lock_release(&file_lock);
    PANIC("load page failed\n");
   }
   lock_release(&file_lock);
-  memset(kpage + page_read_bytes, 0, page_zero_bytes);
+  memset(kpage + Lfile->read_bytes, 0, Lfile->zero_bytes);
 }
 

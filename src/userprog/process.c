@@ -241,7 +241,6 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
-  hash_destroy(&cur -> mmap_hash, munmapHelper);
   uint32_t *pd;
   /* allow write to executable file after process terminates */
   lock_acquire (&file_lock);
@@ -251,6 +250,7 @@ process_exit (void)
   hash_destroy (&cur -> file_table, free_struct_file);
   lock_release (&file_lock);
   lock_acquire (&page_lock);
+  hash_destroy (&cur -> mmap_hash, munmapHelper);
   hash_destroy (&cur -> supplemental_page_table, page_free_action);
   lock_release (&page_lock);
   // hash_destroy(&cur -> mmap_hash, free_struct_mmap);
@@ -592,7 +592,7 @@ load_mmap(struct file *file, uint8_t *upage, struct mmapElem *mmapElem)
     return false;
   }
   uint32_t read_bytes = length;
-  uint32_t zero_bytes = PGSIZE - (length % PGSIZE);
+  uint32_t zero_bytes = (PGSIZE- (length % PGSIZE)) % PGSIZE;
   uint8_t *oldUpage = upage;
   off_t ofs = 0;
   int page_num = 0;
@@ -630,7 +630,7 @@ load_mmap(struct file *file, uint8_t *upage, struct mmapElem *mmapElem)
     page->swapped_id = -1;
   }
 
-  return load_segment(file, 0, upage, length, PGSIZE - (length % PGSIZE), true);
+  return true;
 }
 
 /* Create a minimal stack by mapping a zeroed page at the top of

@@ -8,7 +8,7 @@
 
 #define getFrameHashElem(ELEM) hash_entry (ELEM, struct frame_elem, hash_e)
 #define getFrameListElem(ELEM) list_entry (ELEM, struct frame_elem, list_e)
-#define getPd(ELEM) getFrameListElem(frame_pointer)->ppage->pd
+#define getPd(ELEM) getFrameListElem(ELEM)->ppage->pd
 struct frame_elem{
     struct list_elem list_e;
     struct hash_elem hash_e;
