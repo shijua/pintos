@@ -182,7 +182,7 @@ page_fault (struct intr_frame *f)
       // TODO consider IN_MMAP
       case IN_FRAME:
         lock_release (&page_lock);
-        syscall_exit(STATUS_FAIL);
+        terminate_thread(STATUS_FAIL);
         break;
       case IN_SWAP:
         void *kpage = swapBackPage(page->page_address);
@@ -216,7 +216,7 @@ lock_release (&page_lock);
 
   /* check if the memory is unmapped */
   if (!is_valid_ptr (fault_addr)) {
-      syscall_exit (STATUS_FAIL);
+      terminate_thread (STATUS_FAIL);
   }
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
@@ -247,7 +247,7 @@ grow_stack (void *round_addr) {
   struct thread *curr = thread_current ();
   if(curr->stack_size + PGSIZE >= STACK_MAX){
     lock_release (&page_lock);
-    syscall_exit(STATUS_FAIL);
+    terminate_thread(STATUS_FAIL);
   }
   /* allocate a new page */
   uint8_t *kpage = palloc_get_page (PAL_USER);

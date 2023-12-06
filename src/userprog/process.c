@@ -115,7 +115,7 @@ start_process (void *create_para)
   if (!success) {
     exists = false;
     sema_up (&execute_sema);
-    syscall_exit (STATUS_FAIL);
+    terminate_thread (STATUS_FAIL);
     NOT_REACHED ();
   }
 
@@ -149,7 +149,7 @@ start_process (void *create_para)
   if (para_size > PGSIZE) {
     exists = false;
     sema_up (&execute_sema);
-    syscall_exit (STATUS_FAIL);
+    terminate_thread (STATUS_FAIL);
     NOT_REACHED ();
   }
   /* push element into stack */

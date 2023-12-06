@@ -108,7 +108,6 @@ struct thread
     struct hash supplemental_page_table; /* supplemental page table */
     struct lock page_lock;             /* lock for page table */
     int stack_size;                     /* the size of stack */
-    void *esp;                          /* the esp of thread store it handle case in task 3 stack growth */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

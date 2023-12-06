@@ -12,6 +12,7 @@ typedef int pid_t;
 #define PID_ERROR ((pid_t) -1)          /* Error value for pid_t. */
 
 /* definition for arguments */
+#define ESP f->esp
 #define ARG_0 f->esp + 4
 #define ARG_1 f->esp + 8
 #define ARG_2 f->esp + 12
@@ -32,7 +33,7 @@ struct mmapElem{
 };
 
 void syscall_init (void);
-void syscall_exit (int);
+void terminate_thread (int status);
 void munmapHelper(struct hash_elem *, void *);
 hash_hash_func file_hash_func;
 hash_less_func file_less_func;
