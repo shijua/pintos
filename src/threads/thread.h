@@ -31,6 +31,7 @@ typedef int tid_t;
 struct lock file_lock;
 /* lock used for deletion and generation of child*/
 struct lock child_lock;
+/* lock used for lock pages while using */
 struct lock page_lock;
 /* lock used for ensure check whether process
    is created successfully before return tid */
@@ -106,7 +107,6 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     struct hash supplemental_page_table; /* supplemental page table */
-    struct lock page_lock;             /* lock for page table */
     int stack_size;                     /* the size of stack */
 
 #ifdef USERPROG
@@ -123,7 +123,8 @@ struct thread
     int *exit_code;                    /* the pointer to exit code */
     struct semaphore *wait_sema;       /* origin 0 will be up when exit */
 #endif
-   struct hash mmap_hash;
+   struct hash mmap_hash;              /* hash storing mmap created */
+   int map_int;                        /* map_int used for record map id*/
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

@@ -167,10 +167,10 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
   lock_acquire (&page_lock);
 
-  struct page_elem *page = pageLookUp(pg_round_down(fault_addr));
+  struct page_elem *page = pageLookUp((uint32_t)pg_round_down(fault_addr));
 
   /* check if it is a stack access */
-  uint32_t esp = f->esp;
+  void* esp = f->esp;
   if(page == NULL && is_stack_address(fault_addr, esp)) {
     /* grow the stack */
     grow_stack(pg_round_down(fault_addr));
@@ -180,22 +180,24 @@ page_fault (struct intr_frame *f)
 
   if(page != NULL) { // it is a fake page fault
     switch (page->page_status) {
-      // TODO consider IN_MMAP
       case IN_FRAME:
+        /* error if it is a frame but go to page fault */
         lock_release (&page_lock);
         terminate_thread(STATUS_FAIL);
         break;
       case IN_SWAP:
+        /* swap the page back into frame */
         void *kpage = swapBackPage(page->page_address);
-        if (!install_page(page->page_address, kpage, page->writable)) {
+        if (!install_page((void*)page->page_address, kpage, page->writable)) {
           PANIC ("install page failed\n");
         }
-        pagedir_set_dirty(thread_current()->pagedir, page->page_address, page->dirty);
+        pagedir_set_dirty(thread_current()->pagedir, (void*)page->page_address, page->dirty);
         lock_release (&page_lock);
         break;
       case IN_FILE:
-        if(!page->writable && page->lazy_file->kernel_address != NULL){
-          install_page(page->page_address, page->lazy_file->kernel_address, false);
+        /* load the file into page */
+        if(!page->writable && (void*)page->lazy_file->kernel_address != NULL){
+          install_page((void*)page->page_address, (void*)page->lazy_file->kernel_address, false);
         }
         load_page(page->lazy_file, page);
         lock_release (&page_lock);
@@ -229,10 +231,11 @@ lock_release (&page_lock);
 /* check it is a stack access, we need to grow the stack */
 bool
 is_stack_address (void *fault_addr, void *esp) {
-  struct thread *curr = thread_current ();
+  // if it is outside stack range return false
   if (fault_addr >= PHYS_BASE || fault_addr < PHYS_BASE - STACK_MAX) {
     return false;
   }
+  // several condition that will make it a stack access
   if (esp - PUSH_A_SIZE == fault_addr || esp - PUSH_SIZE == fault_addr || esp <= fault_addr) {
     return true;
   }
@@ -248,9 +251,9 @@ grow_stack (void *round_addr) {
     terminate_thread(STATUS_FAIL);
   }
   /* allocate a new page */
-  uint8_t *kpage = palloc_get_page (PAL_USER);
+  void *kpage = palloc_get_page (PAL_USER);
   /* add the page to the supplemental page table */
-  pageTableAdding(round_addr, kpage, IN_FRAME);
+  pageTableAdding((uint32_t)round_addr, (uint32_t)kpage, IN_FRAME);
   /* add the page to the process's address space */
   if (!install_page (round_addr, kpage, true)) {
     palloc_free_page (kpage);
@@ -266,7 +269,7 @@ load_page(struct lazy_file *Lfile, struct page_elem *page) {
 
    /* Check if virtual page already allocated */
    struct thread *t = thread_current();
-   uint8_t *kpage = pagedir_get_page (t->pagedir, page->page_address);
+   void *kpage = pagedir_get_page (t->pagedir, (void*)page->page_address);
    ASSERT (page != NULL);
    if (kpage == NULL) {
         
@@ -275,17 +278,17 @@ load_page(struct lazy_file *Lfile, struct page_elem *page) {
         ASSERT (kpage != NULL);
 
         /* Add the page to the process's address space. */
-        if (!install_page (page->page_address, kpage, page->writable)) 
+        if (!install_page ((void*)page->page_address, kpage, page->writable)) 
         {
           palloc_free_page (kpage);
           PANIC ("install page failed\n");
         }  
-        page->kernel_address = kpage;
-        page->lazy_file->kernel_address = kpage;
+        page->kernel_address = (uint32_t) kpage;
+        page->lazy_file->kernel_address = (uint32_t) kpage;
       } else {
         /* Check if writable flag for the page should be updated */
-        if(page->writable && !pagedir_is_writable(t->pagedir, page->page_address)) {
-          pagedir_set_writable(t->pagedir, page->page_address, page->writable); 
+        if(page->writable && !pagedir_is_writable(t->pagedir, (void*)page->page_address)) {
+          pagedir_set_writable(t->pagedir, (void*)page->page_address, page->writable); 
         }
    }
   /* Load data into the page. */

@@ -26,7 +26,6 @@ page_elem pageTableAdding (const uint32_t page_address, const uint32_t kernel_ad
     adding->kernel_address = kernel_address;
     adding->page_status = status;
     adding->swapped_id = -1;
-    adding->lock = &thread_current()->page_lock;
     adding->is_pin = false;
     hash_insert(&thread_current()->supplemental_page_table, &adding->elem);
     return adding;
@@ -46,13 +45,13 @@ page_free_action (struct hash_elem *element, void *aux UNUSED) {
         case IN_FILE:
             if(removing->writable){
                 free (removing->lazy_file);
-            } else{
-                pagedir_clear_page(removing->pd, removing->page_address);
+            } else {
+                pagedir_clear_page(removing->pd, (void *) removing->page_address);
             }
             break;
         case IS_MMAP:
             free (removing->lazy_file);
-            if (removing->kernel_address != NULL) {
+            if ((void*) removing->kernel_address != NULL) {
                 frame_free (removing->kernel_address);
             }
     }
@@ -67,25 +66,20 @@ page_clear (const uint32_t page_address) {
 }
 
 
-// TODO using pageLoopUp for find process
 void *
 swapBackPage (const uint32_t page_address) {
-    struct page_elem temp;
-    temp.page_address = page_address;
-    struct hash_elem *find = hash_find(&thread_current()->supplemental_page_table, &temp.elem);
+    page_elem find = pageLookUp(page_address);
     if(find == NULL) {
         PANIC("page not existing");
     }
-    page_elem elem = getPageElem(find);
-    ASSERT(elem->page_status == IN_SWAP);
+    ASSERT(find->page_status == IN_SWAP);
     void* kernel_address = palloc_get_page(PAL_USER);
-    swap_in((void *) kernel_address, elem->swapped_id);
-    elem->kernel_address = (uint32_t) kernel_address;
-    elem->page_status = IN_FRAME;
+    swap_in((void *) kernel_address, find->swapped_id);
+    find->kernel_address = (uint32_t) kernel_address;
+    find->page_status = IN_FRAME;
     return kernel_address;
 }
 
-// gai cheng pointer
 page_elem 
 pageLookUp (const uint32_t page_address) {
     struct page_elem temp;
@@ -98,10 +92,10 @@ pageLookUp (const uint32_t page_address) {
 }
 
 bool page_set_pin (uint32_t page_address, bool pin) {
-    struct hash_elem *find = pageLookUp(page_address);
+    page_elem find = pageLookUp(page_address);
     if (find == NULL) {
         return false;
     }
-    getPageElem(find)->is_pin = pin;
+    find->is_pin = pin;
     return true;
 }

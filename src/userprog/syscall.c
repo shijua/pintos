@@ -36,20 +36,27 @@ static void syscall_close(struct intr_frame *f);
 static void syscall_mmap(struct intr_frame *f);
 static void syscall_unmmap(struct intr_frame *f);
 
-static int mmapInt = 0;
+static void (*fun_ptr_arr[])(struct intr_frame *f) = 
+  {
+    syscall_halt, syscall_exit, syscall_exec, syscall_wait, syscall_create, 
+    syscall_remove, syscall_open, syscall_filesize, syscall_read, syscall_write, 
+    syscall_seek, syscall_tell, syscall_close, syscall_mmap, syscall_unmmap
+  }; 
 
 static struct File_info *get_file_info(int fd);
 
 /* Three functions used for checking user memory access safety. */
-static void check_validation(const void *);
-static void check_validation_rw(const void *, unsigned);
-static void check_validation_str(const char **vaddr);
+static void check_validation(void *);
+static void check_validation_rw(void *, unsigned);
+static void check_validation_str(char **vaddr);
 
 /* function used for pin and unpin frame */
 static void pin_frame(void *uaddr);
 static void unpin_frame(void *uaddr);
-static void pin_frame_file(void *uaddr, int size);
 static void unpin_frame_file(void *uaddr, int size);
+
+/* function used on mmap and unmmap */
+static bool load_mmap(struct file *file, uint32_t upage, struct mmapElem *mmapElem);
 
 unsigned
 file_hash_func(const struct hash_elem *element, void *aux UNUSED)
@@ -99,64 +106,18 @@ syscall_handler(struct intr_frame *f UNUSED)
 {
   /* retrieve the system call number */
   check_validation(ESP);
-  int syscall_num = *((int *)ESP);
+  uint32_t syscall_num = *((int *)ESP);
   unpin_frame(ESP);
-  switch (syscall_num)
+  if (syscall_num >= sizeof(fun_ptr_arr) / sizeof(fun_ptr_arr[0]))
   {
-  case SYS_HALT:
-    syscall_halt(f);
-    break;
-  case SYS_EXIT:
-    syscall_exit(f);
-    break;
-  case SYS_EXEC:
-    syscall_exec(f);
-    break;
-  case SYS_WAIT:
-    syscall_wait(f);
-    break;
-  case SYS_CREATE:
-    syscall_create(f);
-    break;
-  case SYS_REMOVE:
-    syscall_remove(f);
-    break;
-  case SYS_OPEN:
-    syscall_open(f);
-    break;
-  case SYS_FILESIZE:
-    syscall_filesize(f);
-    break;
-  case SYS_READ:
-    syscall_read(f);
-    break;
-  case SYS_WRITE:
-    syscall_write(f);
-    break;
-  case SYS_SEEK:
-    syscall_seek(f);
-    break;
-  case SYS_TELL:
-    syscall_tell(f);
-    break;
-  case SYS_CLOSE:
-    syscall_close(f);
-    break;
-  case SYS_MMAP:
-    syscall_mmap(f);
-    break;
-  case SYS_MUNMAP:
-    syscall_unmmap(f);
-    break;
-  default:
     terminate_thread(STATUS_FAIL);
-    break;
   }
+  fun_ptr_arr[syscall_num](f);
 }
 
 /* Terminates Pintos (this should be seldom used). */
 static void
-syscall_halt(struct intr_frame *f)
+syscall_halt(struct intr_frame *f UNUSED)
 {
   shutdown_power_off();
 }
@@ -441,75 +402,12 @@ syscall_close(struct intr_frame *f)
   unpin_frame(ARG_0);
 }
 
-/* get file info from fd */
-static struct File_info *
-get_file_info(int fd)
-{
-  struct File_info key;
-  key.fd = fd;
-  struct hash_elem *e = hash_find(&thread_current()->file_table, &key.elem);
-  if (e != NULL)
-  {
-    return GET_FILE(e);
-  }
-  /* If no file_info is found, return NULL */
-  return NULL;
-}
-
-/* Function used for checking validation for the user virtual address is valid
-   and check kernel virtual address from the specific address given. If
-   the address given is invalid, call syscall_exit to terminate the process. */
-static void check_validation(const void *vaddr)
-{
-  uint32_t *pd = thread_current()->pagedir;
-  if (vaddr == NULL || !is_user_vaddr(vaddr))
-  {
-    terminate_thread(STATUS_FAIL);
-  }
-  else
-  {
-    page_elem page_elem = pageLookUp(pg_round_down(vaddr));
-    if (page_elem == NULL)
-    {
-      terminate_thread(STATUS_FAIL);
-    }
-    pin_frame(vaddr);
-  }
-}
-
-/* special case for string that need to check whether content is null */
-static void check_validation_str(const char **vaddr)
-{
-  if (*vaddr == NULL)
-  {
-    terminate_thread(STATUS_FAIL);
-  }
-  check_validation(vaddr);
-}
-
-/* Function used for making sure that the buffer stored the file is valid by
-   using for loop.  */
-static void check_validation_rw(const void *buffer, unsigned size)
-{
-  /* address of the start of buffer */
-  uint32_t local = (uint32_t)pg_round_down(buffer);
-  unsigned buffer_length = buffer + size;
-  for (; local < buffer_length; local += PGSIZE)
-  {
-    if (local < USER_BOTTOM || !is_user_vaddr((const void *)local))
-    {
-      terminate_thread(STATUS_FAIL);
-    }
-    check_validation((const void *)local);
-  }
-}
-
 static void syscall_mmap(struct intr_frame *f)
 {
   check_validation(ARG_0);
   check_validation(ARG_1);
   int fd = *(int *)(ARG_0);
-  uint8_t *address = *(uint8_t **)(ARG_1);
+  uint32_t address = *(uint32_t *)(ARG_1);
   lock_acquire(&file_lock);
   struct File_info *find = get_file_info(fd);
   if (find == NULL)
@@ -519,9 +417,9 @@ static void syscall_mmap(struct intr_frame *f)
   }
 
   struct file *file = file_reopen(find->file);
-  
+  lock_release(&file_lock);
   struct mmapElem *adding = malloc(sizeof(struct mmapElem));
-  if (is_stack_address(address, f->esp) || !load_mmap(file, address, adding))
+  if (is_stack_address((void*)address, f->esp) || !load_mmap(file, address, adding))
   {
     free(adding);
     f->eax = -1;
@@ -530,40 +428,13 @@ static void syscall_mmap(struct intr_frame *f)
     return;
   }
 
-  f->eax = mmapInt;
+  f->eax = thread_current()->map_int;
   adding->file = file;
-  adding->mapid = mmapInt++;
+  adding->mapid = thread_current()->map_int++;
   adding->page_address = address;
   hash_insert(&thread_current()->mmap_hash, &adding->elem);
-  lock_release(&file_lock);
   unpin_frame(ARG_0);
   unpin_frame(ARG_1);
-}
-
-void munmapHelper(struct hash_elem *found_elem, void *aux UNUSED)
-{
-  struct mmapElem *found = hash_entry(found_elem, struct mmapElem, elem);
-  int n = found->page_num;
-  for (int i = 0; i < n; i++)
-  {
-    uint8_t *page = found->page_address + i * PGSIZE;
-    if (pagedir_get_page(thread_current()->pagedir, page) != NULL)
-    {
-      if (pagedir_is_dirty(thread_current()->pagedir, page))
-      {
-        lock_acquire(&file_lock);
-        ASSERT(pageLookUp(page)->kernel_address != NULL);
-        file_write_at(found->file, pageLookUp(page)->kernel_address, PGSIZE, pageLookUp(page)->lazy_file->offset);
-        lock_release(&file_lock);
-      }
-    }
-    pagedir_clear_page(thread_current()->pagedir, page);
-    page_clear(page);
-  }
-  lock_acquire(&file_lock);
-  file_close(found->file);
-  lock_release(&file_lock);
-  free(found);
 }
 
 static void syscall_unmmap(struct intr_frame *f)
@@ -582,6 +453,68 @@ static void syscall_unmmap(struct intr_frame *f)
   unpin_frame(ARG_0);
 }
 
+/* get file info from fd */
+static struct File_info *
+get_file_info(int fd)
+{
+  struct File_info key;
+  key.fd = fd;
+  struct hash_elem *e = hash_find(&thread_current()->file_table, &key.elem);
+  if (e != NULL)
+  {
+    return GET_FILE(e);
+  }
+  /* If no file_info is found, return NULL */
+  return NULL;
+}
+
+/* Function used for checking validation for the user virtual address is valid
+   and check kernel virtual address from the specific address given. If
+   the address given is invalid, call syscall_exit to terminate the process. */
+static void check_validation(void *vaddr)
+{
+  if (vaddr == NULL || !is_user_vaddr(vaddr))
+  {
+    terminate_thread(STATUS_FAIL);
+  }
+  else
+  {
+    page_elem page_elem = pageLookUp((uint32_t)pg_round_down(vaddr));
+    if (page_elem == NULL)
+    {
+      terminate_thread(STATUS_FAIL);
+    }
+    pin_frame(vaddr);
+  }
+}
+
+/* special case for string that need to check whether content is null */
+static void check_validation_str(char **vaddr)
+{
+  if (*vaddr == NULL)
+  {
+    terminate_thread(STATUS_FAIL);
+  }
+  check_validation(vaddr);
+}
+
+/* Function used for making sure that the buffer stored the file is valid by
+   using for loop.  */
+static void check_validation_rw(void *buffer, unsigned size)
+{
+  /* address of the start of buffer */
+  uint32_t local = (uint32_t)pg_round_down(buffer);
+  unsigned buffer_length = (uint32_t)buffer + size;
+  for (; local < buffer_length; local += PGSIZE)
+  {
+    if (local < USER_BOTTOM || !is_user_vaddr((const void *)local))
+    {
+      terminate_thread(STATUS_FAIL);
+    }
+    check_validation((void *)local);
+  }
+}
+
 
 /* unmap all the file in frame */
 static void unpin_frame_file(void *uaddr, int size)
@@ -589,7 +522,7 @@ static void unpin_frame_file(void *uaddr, int size)
   lock_acquire(&page_lock);
 
   uint32_t local = (uint32_t)pg_round_down(uaddr);
-  unsigned buffer_length = uaddr + size;
+  uint32_t buffer_length = (uint32_t) uaddr + size;
   for (; local < buffer_length; local += PGSIZE)
   {
     if (!page_set_pin ((uint32_t) local, false)) {
@@ -606,35 +539,35 @@ static void pin_frame(void *uaddr)
 {
   lock_acquire(&page_lock);
   /* not need to exists if failed */
-  if (pageLookUp(pg_round_down(uaddr)) == NULL)
+  if (pageLookUp((uint32_t)pg_round_down(uaddr)) == NULL)
   {
     lock_release(&page_lock);
     return;
   }
   page_set_pin((uint32_t)pg_round_down(uaddr), true);
   /* load into frame */
-  page_elem page = pageLookUp(pg_round_down(uaddr));
-  if (pagedir_get_page(thread_current()->pagedir, page->page_address) == NULL)
+  page_elem page = pageLookUp((uint32_t) pg_round_down(uaddr));
+  if (pagedir_get_page(thread_current()->pagedir, (void*) page->page_address) == NULL)
   {
     if (page->page_status == IN_SWAP)
     {
       void *kpage = swapBackPage(page->page_address);
-      if (!install_page(page->page_address, kpage, page->writable))
+      if (!install_page((void *) page->page_address, (void *)kpage, page->writable))
       {
         PANIC("install page failed\n");
       }
-      pagedir_set_dirty(thread_current()->pagedir, page->page_address, page->dirty);
+      pagedir_set_dirty(thread_current()->pagedir, (void*) page->page_address, page->dirty);
     }
     else if (page->page_status == IN_FILE || page->page_status == IS_MMAP)
     {
-      if(page->page_status == IN_FILE && !page->writable && page->lazy_file->kernel_address != NULL){
-          install_page(page->page_address, page->lazy_file->kernel_address, false);
+      if(page->page_status == IN_FILE && !page->writable && (void*)page->lazy_file->kernel_address != NULL){
+          install_page((void*)page->page_address, (void*) page->lazy_file->kernel_address, false);
         }
       load_page(page->lazy_file, page);
     }
     else
     {
-      PANIC("pin_frame_file: page status is wrong\n");
+      PANIC("pin_frame: page status is wrong\n");
     }
   }
   lock_release(&page_lock);
@@ -645,7 +578,7 @@ static void unpin_frame(void *uaddr)
 {
   lock_acquire(&page_lock);
   /* not need to exists if failed */
-  if (pageLookUp(pg_round_down(uaddr)) == NULL)
+  if (pageLookUp((uint32_t) pg_round_down(uaddr)) == NULL)
   {
     lock_release(&page_lock);
     return;
@@ -671,4 +604,82 @@ void terminate_thread (int status) {
   }
   thread_exit();
   NOT_REACHED();
+}
+
+static bool
+load_mmap(struct file *file, uint32_t upage, struct mmapElem *mmapElem)
+{
+  lock_acquire(&file_lock);
+  uint32_t length = file_length(file);
+  lock_release(&file_lock);
+  if (length == 0 || pg_ofs((void*)upage) != 0 || (void *)upage == NULL) {
+    return false;
+  }
+  uint32_t read_bytes = length;
+  uint32_t zero_bytes = (PGSIZE- (length % PGSIZE)) % PGSIZE;
+  uint32_t oldUpage = upage;
+  off_t ofs = 0;
+  int page_num = 0;
+  while (read_bytes > 0) 
+    {
+      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+      
+      lock_acquire (&page_lock);
+      if (pageLookUp(oldUpage) != NULL) {
+        lock_release (&page_lock);
+        return false;
+      }
+      lock_release (&page_lock);
+
+      ofs += page_read_bytes;
+      read_bytes -= page_read_bytes;
+      oldUpage += PGSIZE;
+      page_num++;
+    }
+  mmapElem->page_num = page_num;
+  for(int i = 0; i < page_num; i++) {
+    struct page_elem *page = pageTableAdding(upage + i*PGSIZE, (uint32_t) NULL, IS_MMAP);
+    page->lazy_file = malloc (sizeof (struct lazy_file));
+    page->lazy_file->file = file;
+    page->lazy_file->offset = i*PGSIZE;
+    if(i == page_num - 1) {
+      page->lazy_file->read_bytes = PGSIZE - zero_bytes;
+      page->lazy_file->zero_bytes = zero_bytes;
+    } else{
+      page->lazy_file->read_bytes = PGSIZE;
+      page->lazy_file->zero_bytes = 0;
+    }
+    page->writable = true;
+    page->swapped_id = -1;
+  }
+
+  return true;
+}
+
+/* a helper function for munmap */
+void munmapHelper(struct hash_elem *found_elem, void *aux UNUSED)
+{
+  struct mmapElem *found = hash_entry(found_elem, struct mmapElem, elem);
+  int n = found->page_num;
+  for (int i = 0; i < n; i++)
+  {
+    uint32_t page = found->page_address + i * PGSIZE;
+    if (pagedir_get_page(thread_current()->pagedir, (void*) page) != NULL)
+    {
+      // only write back if it is dirty
+      if (pagedir_is_dirty(thread_current()->pagedir, (void*) page))
+      {
+        lock_acquire(&file_lock);
+        ASSERT((void*)pageLookUp(page)->kernel_address != NULL);
+        file_write_at(found->file, (void*)pageLookUp(page)->kernel_address, PGSIZE, pageLookUp(page)->lazy_file->offset);
+        lock_release(&file_lock);
+      }
+    }
+    pagedir_clear_page(thread_current()->pagedir, (void*)page);
+    page_clear(page);
+  }
+  lock_acquire(&file_lock);
+  file_close(found->file);
+  lock_release(&file_lock);
+  free(found);
 }

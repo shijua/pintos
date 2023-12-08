@@ -254,7 +254,6 @@ process_exit (void)
   hash_destroy (&cur -> mmap_hash, munmapHelper);
   hash_destroy (&cur -> supplemental_page_table, page_free_action);
   lock_release (&page_lock);
-  // hash_destroy(&cur -> mmap_hash, free_struct_mmap);
   free_child_list (&thread_current() -> child_list);
 
   /* Destroy the current process's page directory and switch back
@@ -472,6 +471,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
   success = true;
 
  done:
+  if (!success) {
+    lock_acquire (&file_lock);
+    file_close (file);
+    lock_release (&file_lock);
+  }
   return success;
 }
 
@@ -546,7 +550,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   if(!writable) {
     exe_list = exe_get_create (file, ofs + read_bytes + zero_bytes);
   }
-  printf("address:%p\n", &exe_list);
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
@@ -558,8 +561,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       
       lock_acquire (&page_lock);
       /* doing lazy load */
-      if (pageLookUp(upage) == NULL) {
-        pageTableAdding(upage, NULL, IN_FILE);
+      if (pageLookUp((uint32_t) upage) == NULL) {
+        pageTableAdding((uint32_t) upage, (uint32_t) NULL, IN_FILE);
       }
       lock_release (&page_lock);
 
@@ -568,7 +571,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         pagedir_clear_page (thread_current ()->pagedir, upage);
       }
 
-      struct page_elem *page = pageLookUp(upage);
+      struct page_elem *page = pageLookUp((uint32_t) upage);
       page->page_status = IN_FILE;
 
         if(writable) {
@@ -597,75 +600,23 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   return true;
 }
 
-// TODO move it into syscall
-bool
-load_mmap(struct file *file, uint8_t *upage, struct mmapElem *mmapElem)
-{
-  uint32_t length = file_length(file);
-  if (length == 0 || pg_ofs(upage) != 0 || upage == NULL) {
-    return false;
-  }
-  uint32_t read_bytes = length;
-  uint32_t zero_bytes = (PGSIZE- (length % PGSIZE)) % PGSIZE;
-  uint8_t *oldUpage = upage;
-  off_t ofs = 0;
-  int page_num = 0;
-  while (read_bytes > 0) 
-    {
-      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-      size_t page_zero_bytes = PGSIZE - page_read_bytes;
-      
-      lock_acquire (&page_lock);
-      if (pageLookUp(oldUpage) != NULL) {
-        lock_release (&page_lock);
-        return false;
-      }
-      lock_release (&page_lock);
-
-      ofs += page_read_bytes;
-      read_bytes -= page_read_bytes;
-      oldUpage += PGSIZE;
-      page_num++;
-    }
-  mmapElem->page_num = page_num;
-  for(int i = 0; i < page_num; i++) {
-    struct page_elem *page = pageTableAdding(upage + i*PGSIZE, NULL, IS_MMAP);
-    page->lazy_file = malloc (sizeof (struct lazy_file));
-    page->lazy_file->file = file;
-    page->lazy_file->offset = i*PGSIZE;
-    if(i == page_num - 1) {
-      page->lazy_file->read_bytes = PGSIZE - zero_bytes;
-      page->lazy_file->zero_bytes = zero_bytes;
-    } else{
-      page->lazy_file->read_bytes = PGSIZE;
-      page->lazy_file->zero_bytes = 0;
-    }
-    page->writable = true;
-    page->swapped_id = -1;
-  }
-
-  return true;
-}
-
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
 setup_stack (void **esp) 
 {
-  // need to change
   uint8_t *kpage;
   bool success = false;
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   lock_acquire (&page_lock);
-  pageTableAdding (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, IN_FRAME);
-  success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+  pageTableAdding (((uint32_t) PHYS_BASE) - PGSIZE, (uint32_t) kpage, IN_FRAME);
+  success = install_page (((void*) PHYS_BASE) - PGSIZE, (void*) kpage, true);
   if (success) {
     *esp = PHYS_BASE;
   } else {
     palloc_free_page (kpage);
     PANIC ("setup stack failed: may not happen");
-    // TODO page need to be free if not successful
 
   }
   lock_release (&page_lock);

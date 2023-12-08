@@ -25,7 +25,7 @@ struct lazy_file {
    off_t offset;
    size_t read_bytes;
    size_t zero_bytes;
-   uint8_t *kernel_address;
+   uint32_t kernel_address;
 };
 
 
@@ -34,14 +34,11 @@ typedef struct page_elem {
    uint32_t *pd;
    uint32_t page_address;
    enum page_status page_status;
-   // union info {
    struct lazy_file *lazy_file;
    uint32_t kernel_address;
    size_t swapped_id;
-   // }
    bool writable;
    bool dirty;
-   struct lock *lock;
    bool is_pin;
 } *page_elem;
 

@@ -16,11 +16,11 @@ struct frame_elem{
     struct page_elem* ppage;
 };
 
-void frame_init();
+void frame_init(void);
 void frame_add (uint32_t, struct page_elem *);
 void frame_free (uint32_t);
 hash_action_func frame_free_action;
-void frame_swap ();
+void frame_swap (void);
 
 
 #endif

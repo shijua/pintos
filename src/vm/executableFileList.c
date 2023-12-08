@@ -58,7 +58,7 @@ exe_get_create (struct file* file, uint32_t size) {
         adding -> lazy_file_list = calloc(size1, sizeof(struct lazy_file *));
         for(int i = 0; i < size1; i++) {
             adding->lazy_file_list[i] = malloc(sizeof(struct lazy_file));
-            adding->lazy_file_list[i]->kernel_address = NULL;
+            adding->lazy_file_list[i]->kernel_address = (uint32_t) NULL;
         }
         hash_insert(&exe_file_hash, &adding->elem);
         lock_release(&exe_file_lock);

@@ -35,8 +35,8 @@ frame_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux
   return getFrameHashElem(a)->frame_addr <  getFrameHashElem(b)->frame_addr;
 }
 
-void
-frame_index_loop() {
+static void
+frame_index_loop(void) {
   if(frame_pointer == list_back(&frame_list)){
     frame_pointer = list_begin(&frame_list);
     return;
@@ -112,7 +112,7 @@ frame_swap () {
   struct frame_elem *frame_elem = getFrameListElem(frame_pointer);
   bool locked_by_own = false;
   if (!lock_held_by_current_thread(&page_lock) && frame_elem->ppage != NULL) {
-      ASSERT (frame_elem->ppage->kernel_address != NULL);
+      ASSERT ((void*) frame_elem->ppage->kernel_address != NULL);
       lock_acquire(&page_lock);
       locked_by_own = true;
   }
@@ -125,7 +125,7 @@ frame_swap () {
   }
   
   if(frame_elem->ppage->page_status == IS_MMAP ){
-    if(pagedir_is_dirty(frame_elem->ppage->pd, frame_elem->ppage->page_address)) {
+    if(pagedir_is_dirty(frame_elem->ppage->pd, (void *) frame_elem->ppage->page_address)) {
       lock_acquire(&file_lock);
       file_write_at(frame_elem->ppage->lazy_file->file, 
         (void *)frame_elem->frame_addr, PGSIZE, frame_elem->ppage->lazy_file->offset);
@@ -134,13 +134,13 @@ frame_swap () {
     
   } else if(frame_elem->ppage->page_status == IN_FILE){
     if(frame_elem->ppage->writable ){
-      if(pagedir_is_dirty(frame_elem->ppage->pd, frame_elem->ppage->page_address)){
+      if(pagedir_is_dirty(frame_elem->ppage->pd, (void *)frame_elem->ppage->page_address)){
         file_write_at(frame_elem->ppage->lazy_file->file, 
           (void *)frame_elem->frame_addr, PGSIZE, frame_elem->ppage->lazy_file->offset);
-        frame_elem->ppage->lazy_file->kernel_address = NULL;
+        frame_elem->ppage->lazy_file->kernel_address = (uint32_t) NULL;
       }
     } else{
-      frame_elem->ppage->lazy_file->kernel_address = NULL;
+      frame_elem->ppage->lazy_file->kernel_address = (uint32_t) NULL;
     }
   } else{
     frame_elem->ppage->page_status = IN_SWAP;
@@ -148,7 +148,7 @@ frame_swap () {
     frame_elem->ppage->writable = pagedir_is_writable(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address);
     frame_elem->ppage->dirty = pagedir_is_dirty(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address);
   }
-  frame_elem->ppage->kernel_address = NULL;
+  frame_elem->ppage->kernel_address = (uint32_t) NULL;
   /* page need be reallocate later as kernel may request and will not add to the frame */
   palloc_free_page((void *) frame_elem->frame_addr);
   pagedir_clear_page (frame_elem->ppage->pd, (void *) frame_elem->ppage->page_address);
