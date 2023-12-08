@@ -21,7 +21,7 @@
 
 static void syscall_handler(struct intr_frame *f);
 static void syscall_halt(struct intr_frame *f);
-static void syscall_exit (struct intr_frame *f);
+static void syscall_exit(struct intr_frame *f);
 static void syscall_exec(struct intr_frame *f);
 static void syscall_wait(struct intr_frame *f);
 static void syscall_create(struct intr_frame *f);
@@ -36,12 +36,11 @@ static void syscall_close(struct intr_frame *f);
 static void syscall_mmap(struct intr_frame *f);
 static void syscall_unmmap(struct intr_frame *f);
 
-static void (*fun_ptr_arr[])(struct intr_frame *f) = 
-  {
-    syscall_halt, syscall_exit, syscall_exec, syscall_wait, syscall_create, 
-    syscall_remove, syscall_open, syscall_filesize, syscall_read, syscall_write, 
-    syscall_seek, syscall_tell, syscall_close, syscall_mmap, syscall_unmmap
-  }; 
+static void (*fun_ptr_arr[])(struct intr_frame *f) =
+    {
+        syscall_halt, syscall_exit, syscall_exec, syscall_wait, syscall_create,
+        syscall_remove, syscall_open, syscall_filesize, syscall_read, syscall_write,
+        syscall_seek, syscall_tell, syscall_close, syscall_mmap, syscall_unmmap};
 
 static struct File_info *get_file_info(int fd);
 
@@ -99,7 +98,6 @@ void syscall_init(void)
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-
 /* direct to related system call according to system call number */
 static void
 syscall_handler(struct intr_frame *f UNUSED)
@@ -124,7 +122,7 @@ syscall_halt(struct intr_frame *f UNUSED)
 
 /* Terminates the current user program, sending its
    exit status to the kernal. */
-static void 
+static void
 syscall_exit(struct intr_frame *f)
 {
   check_validation(ARG_0);
@@ -181,7 +179,7 @@ syscall_create(struct intr_frame *f)
   check_validation(ARG_1);
   char *file = *(char **)(ARG_0);
   unsigned initial_size = *((unsigned *)(ARG_1));
-  
+
   lock_acquire(&file_lock);
   bool success = filesys_create(file, initial_size);
   lock_release(&file_lock);
@@ -211,7 +209,7 @@ syscall_open(struct intr_frame *f)
 {
   check_validation_str(ARG_0);
   char *file = *(char **)(ARG_0);
-  
+
   lock_acquire(&file_lock);
   struct file *ff = filesys_open(file);
   if (ff == NULL)
@@ -389,7 +387,7 @@ syscall_close(struct intr_frame *f)
 {
   check_validation(ARG_0);
   int fd = *((int *)(ARG_0));
-  
+
   lock_acquire(&file_lock);
   struct File_info *info = get_file_info(fd);
   if (info)
@@ -419,7 +417,7 @@ static void syscall_mmap(struct intr_frame *f)
   struct file *file = file_reopen(find->file);
   lock_release(&file_lock);
   struct mmap_elem *adding = malloc(sizeof(struct mmap_elem));
-  if (is_stack_address((void*)address, f->esp) || !load_mmap(file, address, adding))
+  if (is_stack_address((void *)address, f->esp) || !load_mmap(file, address, adding))
   {
     free(adding);
     f->eax = -1;
@@ -449,9 +447,9 @@ static void syscall_unmmap(struct intr_frame *f)
     PANIC("mapid not found");
   }
   hash_delete(&thread_current()->mmap_hash, find);
-  lock_acquire (&page_lock);
+  lock_acquire(&page_lock);
   munmapHelper(find, NULL);
-  lock_release (&page_lock);
+  lock_release(&page_lock);
   unpin_frame(ARG_0);
 }
 
@@ -517,19 +515,19 @@ static void check_validation_rw(void *buffer, unsigned size)
   }
 }
 
-
 /* unmap all the file in frame */
 static void unpin_frame_file(void *uaddr, int size)
 {
   lock_acquire(&page_lock);
 
   uint32_t local = (uint32_t)pg_round_down(uaddr);
-  uint32_t buffer_length = (uint32_t) uaddr + size;
+  uint32_t buffer_length = (uint32_t)uaddr + size;
   for (; local < buffer_length; local += PGSIZE)
   {
-    if (!page_set_pin ((uint32_t) local, false)) {
+    if (!page_set_pin((uint32_t)local, false))
+    {
       lock_release(&page_lock);
-      terminate_thread (STATUS_FAIL);
+      terminate_thread(STATUS_FAIL);
     }
   }
 
@@ -548,17 +546,17 @@ static void pin_frame(void *uaddr)
   }
   page_set_pin((uint32_t)pg_round_down(uaddr), true);
   /* load into frame, doing same thing as page fault*/
-  page_elem page = page_lookup((uint32_t) pg_round_down(uaddr));
-  if (pagedir_get_page(thread_current()->pagedir, (void*) page->page_address) == NULL)
+  page_elem page = page_lookup((uint32_t)pg_round_down(uaddr));
+  if (pagedir_get_page(thread_current()->pagedir, (void *)page->page_address) == NULL)
   {
     if (page->page_status == IN_SWAP)
     {
       void *kpage = swap_back_page(page->page_address);
-      if (!install_page((void *) page->page_address, (void *)kpage, page->writable))
+      if (!install_page((void *)page->page_address, (void *)kpage, page->writable))
       {
         PANIC("install page failed\n");
       }
-      pagedir_set_dirty(thread_current()->pagedir, (void*) page->page_address, page->dirty);
+      pagedir_set_dirty(thread_current()->pagedir, (void *)page->page_address, page->dirty);
     }
     else if (page->page_status == IN_FILE || page->page_status == IS_MMAP)
     {
@@ -577,7 +575,7 @@ static void unpin_frame(void *uaddr)
 {
   lock_acquire(&page_lock);
   /* not need to exists if failed */
-  if (page_lookup((uint32_t) pg_round_down(uaddr)) == NULL)
+  if (page_lookup((uint32_t)pg_round_down(uaddr)) == NULL)
   {
     lock_release(&page_lock);
     return;
@@ -587,7 +585,8 @@ static void unpin_frame(void *uaddr)
 }
 
 /* doing similar thing as syscall exit but receive status as a argument */
-void terminate_thread (int status) {
+void terminate_thread(int status)
+{
   struct thread *cur = thread_current();
   printf("%s: exit(%" PRId32 ")\n", cur->name, status);
   /* ensure the file lock has been released */
@@ -611,42 +610,48 @@ load_mmap(struct file *file, uint32_t upage, struct mmap_elem *mmap_elem)
   lock_acquire(&file_lock);
   uint32_t length = file_length(file);
   lock_release(&file_lock);
-  if (length == 0 || pg_ofs((void*)upage) != 0 || (void *)upage == NULL) {
+  if (length == 0 || pg_ofs((void *)upage) != 0 || (void *)upage == NULL)
+  {
     return false;
   }
   uint32_t read_bytes = length;
-  uint32_t zero_bytes = (PGSIZE- (length % PGSIZE)) % PGSIZE;
+  uint32_t zero_bytes = (PGSIZE - (length % PGSIZE)) % PGSIZE;
   uint32_t oldUpage = upage;
   off_t ofs = 0;
   int page_num = 0;
-  while (read_bytes > 0) 
-    {
-      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-      
-      lock_acquire (&page_lock);
-      if (page_lookup(oldUpage) != NULL) {
-        lock_release (&page_lock);
-        return false;
-      }
-      lock_release (&page_lock);
+  while (read_bytes > 0)
+  {
+    size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 
-      ofs += page_read_bytes;
-      read_bytes -= page_read_bytes;
-      oldUpage += PGSIZE;
-      page_num++;
+    lock_acquire(&page_lock);
+    if (page_lookup(oldUpage) != NULL)
+    {
+      lock_release(&page_lock);
+      return false;
     }
+    lock_release(&page_lock);
+
+    ofs += page_read_bytes;
+    read_bytes -= page_read_bytes;
+    oldUpage += PGSIZE;
+    page_num++;
+  }
   mmap_elem->page_num = page_num;
-  for(int i = 0; i < page_num; i++) {
-    lock_acquire (&page_lock);
-    struct page_elem *page = page_table_adding(upage + i*PGSIZE, (uint32_t) NULL, IS_MMAP);
-    lock_release (&page_lock);
-    page->lazy_file = malloc (sizeof (struct lazy_file));
+  for (int i = 0; i < page_num; i++)
+  {
+    lock_acquire(&page_lock);
+    struct page_elem *page = page_table_adding(upage + i * PGSIZE, (uint32_t)NULL, IS_MMAP);
+    lock_release(&page_lock);
+    page->lazy_file = malloc(sizeof(struct lazy_file));
     page->lazy_file->file = file;
-    page->lazy_file->offset = i*PGSIZE;
-    if(i == page_num - 1) {
+    page->lazy_file->offset = i * PGSIZE;
+    if (i == page_num - 1)
+    {
       page->lazy_file->read_bytes = PGSIZE - zero_bytes;
       page->lazy_file->zero_bytes = zero_bytes;
-    } else{
+    }
+    else
+    {
       page->lazy_file->read_bytes = PGSIZE;
       page->lazy_file->zero_bytes = 0;
     }
@@ -665,18 +670,18 @@ void munmapHelper(struct hash_elem *found_elem, void *aux UNUSED)
   for (int i = 0; i < n; i++)
   {
     uint32_t page = found->page_address + i * PGSIZE;
-    if (pagedir_get_page(thread_current()->pagedir, (void*) page) != NULL)
+    if (pagedir_get_page(thread_current()->pagedir, (void *)page) != NULL)
     {
       // only write back if it is dirty
-      if (pagedir_is_dirty(thread_current()->pagedir, (void*) page))
+      if (pagedir_is_dirty(thread_current()->pagedir, (void *)page))
       {
-        ASSERT((void*)page_lookup(page)->kernel_address != NULL);
+        ASSERT((void *)page_lookup(page)->kernel_address != NULL);
         lock_acquire(&file_lock);
-        file_write_at(found->file, (void*)page_lookup(page)->kernel_address, PGSIZE, page_lookup(page)->lazy_file->offset);
+        file_write_at(found->file, (void *)page_lookup(page)->kernel_address, PGSIZE, page_lookup(page)->lazy_file->offset);
         lock_release(&file_lock);
       }
     }
-    pagedir_clear_page(thread_current()->pagedir, (void*)page);
+    pagedir_clear_page(thread_current()->pagedir, (void *)page);
     page_clear(page);
   }
   lock_acquire(&file_lock);
