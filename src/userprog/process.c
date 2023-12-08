@@ -19,6 +19,7 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "vm/pageTable.h"
+#include "vm/executableFileList.h"
 
 static bool exists; /* use for indicate whether executable file exists */
 static thread_func start_process NO_RETURN;
@@ -471,8 +472,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   success = true;
 
  done:
-  /* We arrive here whether the load is successful or not. */
-  file_close (file);
   return success;
 }
 
@@ -542,7 +541,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
-
+  executable_file_elem exe_list = NULL;
+  int i = 0;
+  if(writable){
+    exe_list = exe_get_create (file, ofs + read_bytes + zero_bytes);
+  }
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
@@ -562,16 +565,20 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (pagedir_get_page (thread_current ()->pagedir, upage) != NULL) {
         pagedir_clear_page (thread_current ()->pagedir, upage);
       }
+
       struct page_elem *page = pageLookUp(upage);
       lock_release (&page_lock);
 
       page->page_status = IN_FILE;
-      
-      page->lazy_file = malloc (sizeof (struct lazy_file));
-      page->lazy_file->file = file;
-      page->lazy_file->offset = ofs;
-      page->lazy_file->read_bytes = page_read_bytes;
-      page->lazy_file->zero_bytes = page_zero_bytes;
+      if(writable || exe_list->lazy_file_list[i] == NULL) {
+        page->lazy_file = malloc (sizeof (struct lazy_file));
+        page->lazy_file->file = file;
+        page->lazy_file->offset = ofs;
+        page->lazy_file->read_bytes = page_read_bytes;
+        page->lazy_file->zero_bytes = page_zero_bytes;
+      } else {
+        page->lazy_file = exe_list->lazy_file_list[i];
+      }
       page->writable = writable;
       page->swapped_id = -1;
       ofs += page_read_bytes;
