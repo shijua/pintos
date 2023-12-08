@@ -561,6 +561,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (pageLookUp(upage) == NULL) {
         pageTableAdding(upage, NULL, IN_FILE);
       }
+      lock_release (&page_lock);
 
       /* clear its own pagedir if it have so it will falls into page fault*/
       if (pagedir_get_page (thread_current ()->pagedir, upage) != NULL) {
@@ -570,28 +571,20 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       struct page_elem *page = pageLookUp(upage);
       page->page_status = IN_FILE;
 
-      if(writable || exe_list->lazy_file_list[i] == NULL) {
-        if(!writable){
-          exe_list->lazy_file_list[i] = malloc(sizeof(struct lazy_file));
-          page->lazy_file = exe_list->lazy_file_list[i];
-        } else{
+        if(writable) {
           page->lazy_file = malloc (sizeof (struct lazy_file));
+          page->lazy_file->file = file;
+          page->lazy_file->offset = ofs;
+          page->lazy_file->read_bytes = page_read_bytes;
+          page->lazy_file->zero_bytes = page_zero_bytes;
+        } else{
+        //   ASSERT(exe_list->lazy_file_list[i] != NULL);
+          page->lazy_file = exe_list->lazy_file_list[i];
+          exe_list->lazy_file_list[i]->file = file;
+          exe_list->lazy_file_list[i]->offset = ofs;
+          exe_list->lazy_file_list[i]->read_bytes = page_read_bytes;
+          exe_list->lazy_file_list[i]->zero_bytes = page_zero_bytes;
         }
-        page->lazy_file->file = file;
-        page->lazy_file->offset = ofs;
-        page->lazy_file->read_bytes = page_read_bytes;
-        page->lazy_file->zero_bytes = page_zero_bytes;
-        printf("bb%d, %d\n", page->lazy_file->offset, ofs);
-        if (exe_list != NULL && exe_list->lazy_file_list[i] != NULL && i > 1) {
-          printf("aa%d, %d\n", exe_list->lazy_file_list[i]->offset, ofs);
-        }
-      } else {
-        page->lazy_file = exe_list->lazy_file_list[i];
-        printf("%d, %d\n", page->lazy_file->offset, ofs);
-        // ASSERT (page->lazy_file->offset == ofs);
-        // ASSERT (page->lazy_file->read_bytes == page_read_bytes);
-        // ASSERT (page->lazy_file->zero_bytes == page_zero_bytes);
-      }
       i++;
       page->writable = writable;
       page->swapped_id = -1;
@@ -600,7 +593,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
-      lock_release (&page_lock);
     }
   return true;
 }

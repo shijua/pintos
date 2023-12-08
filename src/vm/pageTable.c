@@ -44,7 +44,11 @@ page_free_action (struct hash_elem *element, void *aux UNUSED) {
             swap_drop (removing->swapped_id);
             break;
         case IN_FILE:
-            free (removing->lazy_file);
+            if(removing->writable){
+                free (removing->lazy_file);
+            } else{
+                pagedir_clear_page(removing->pd, removing->page_address);
+            }
             break;
         case IS_MMAP:
             free (removing->lazy_file);

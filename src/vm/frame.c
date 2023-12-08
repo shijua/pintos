@@ -133,7 +133,15 @@ frame_swap () {
     }
     
   } else if(frame_elem->ppage->page_status == IN_FILE){
-
+    if(frame_elem->ppage->writable ){
+      if(pagedir_is_dirty(frame_elem->ppage->pd, frame_elem->ppage->page_address)){
+        file_write_at(frame_elem->ppage->lazy_file->file, 
+          (void *)frame_elem->frame_addr, PGSIZE, frame_elem->ppage->lazy_file->offset);
+        frame_elem->ppage->lazy_file->kernel_address = NULL;
+      }
+    } else{
+      frame_elem->ppage->lazy_file->kernel_address = NULL;
+    }
   } else{
     frame_elem->ppage->page_status = IN_SWAP;
     frame_elem->ppage->swapped_id = swap_out((void *) frame_elem->frame_addr);
