@@ -24,7 +24,7 @@ struct File_info {
   struct hash_elem elem;
 };
 
-struct mmapElem{
+struct mmap_elem{
  int mapid;
  struct hash_elem elem;
  uint32_t page_num;

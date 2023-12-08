@@ -6,9 +6,9 @@
 #include "lib/kernel/bitmap.h"
 #include "pageTable.h"
 
-#define getFrameHashElem(ELEM) hash_entry (ELEM, struct frame_elem, hash_e)
-#define getFrameListElem(ELEM) list_entry (ELEM, struct frame_elem, list_e)
-#define getPd(ELEM) getFrameListElem(ELEM)->ppage->pd
+#define get_frame_hash_elem(ELEM) hash_entry (ELEM, struct frame_elem, hash_e)
+#define get_frame_list_elem(ELEM) list_entry (ELEM, struct frame_elem, list_e)
+#define get_pd(ELEM) get_frame_list_elem(ELEM)->ppage->pd
 struct frame_elem{
     struct list_elem list_e;
     struct hash_elem hash_e;

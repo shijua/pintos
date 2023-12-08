@@ -8,15 +8,15 @@
 #include <debug.h>
 
 unsigned page_hash_func (const struct hash_elem *element, void *aux UNUSED) {
-  return getPageElem(element)->page_address;
+  return get_page_elem(element)->page_address;
 }
 
 bool page_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED) {
-  return getPageElem(a)->page_address <  getPageElem(b)->page_address;
+  return get_page_elem(a)->page_address <  get_page_elem(b)->page_address;
 }
 
-page_elem pageTableAdding (const uint32_t page_address, const uint32_t kernel_address, enum page_status status) {
-    ASSERT (pageLookUp(page_address) == NULL); // make sure this page is not in the supplemental page table
+page_elem page_table_adding (const uint32_t page_address, const uint32_t kernel_address, enum page_status status) {
+    ASSERT (page_lookup(page_address) == NULL); // make sure this page is not in the supplemental page table
     page_elem adding = malloc(sizeof(struct page_elem));
     if(adding == NULL) {
         PANIC("malloc failed");
@@ -33,7 +33,7 @@ page_elem pageTableAdding (const uint32_t page_address, const uint32_t kernel_ad
 
 void
 page_free_action (struct hash_elem *element, void *aux UNUSED) {
-    page_elem removing = getPageElem(element);
+    page_elem removing = get_page_elem(element);
     ASSERT (removing != NULL);
     switch (removing->page_status) {
         case IN_FRAME:
@@ -60,15 +60,15 @@ page_free_action (struct hash_elem *element, void *aux UNUSED) {
 
 void
 page_clear (const uint32_t page_address) {
-    page_elem removing = pageLookUp(page_address);
+    page_elem removing = page_lookup(page_address);
     hash_delete(&thread_current()->supplemental_page_table, &removing->elem);
     page_free_action(&removing->elem, NULL);
 }
 
 
 void *
-swapBackPage (const uint32_t page_address) {
-    page_elem find = pageLookUp(page_address);
+swap_back_page (const uint32_t page_address) {
+    page_elem find = page_lookup(page_address);
     if(find == NULL) {
         PANIC("page not existing");
     }
@@ -81,18 +81,18 @@ swapBackPage (const uint32_t page_address) {
 }
 
 page_elem 
-pageLookUp (const uint32_t page_address) {
+page_lookup (const uint32_t page_address) {
     struct page_elem temp;
     temp.page_address = page_address;
     struct hash_elem *find = hash_find(&thread_current()->supplemental_page_table, &temp.elem);
     if(find == NULL) {
       return NULL; // which means this page is not in the supplemental page table, so it is not a valid page
     }
-    return getPageElem(find);
+    return get_page_elem(find);
 }
 
 bool page_set_pin (uint32_t page_address, bool pin) {
-    page_elem find = pageLookUp(page_address);
+    page_elem find = page_lookup(page_address);
     if (find == NULL) {
         return false;
     }

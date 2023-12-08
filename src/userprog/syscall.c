@@ -56,7 +56,7 @@ static void unpin_frame(void *uaddr);
 static void unpin_frame_file(void *uaddr, int size);
 
 /* function used on mmap and unmmap */
-static bool load_mmap(struct file *file, uint32_t upage, struct mmapElem *mmapElem);
+static bool load_mmap(struct file *file, uint32_t upage, struct mmap_elem *mmap_elem);
 
 unsigned
 file_hash_func(const struct hash_elem *element, void *aux UNUSED)
@@ -72,12 +72,12 @@ bool file_less_func(const struct hash_elem *a, const struct hash_elem *b, void *
 unsigned
 mmap_hash_func(const struct hash_elem *element, void *aux UNUSED)
 {
-  return (hash_int(hash_entry(element, struct mmapElem, elem)->mapid));
+  return (hash_int(hash_entry(element, struct mmap_elem, elem)->mapid));
 }
 
 bool mmap_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED)
 {
-  return (hash_entry(a, struct mmapElem, elem)->mapid < hash_entry(b, struct mmapElem, elem)->mapid);
+  return (hash_entry(a, struct mmap_elem, elem)->mapid < hash_entry(b, struct mmap_elem, elem)->mapid);
 }
 
 void free_struct_file(struct hash_elem *element, void *aux UNUSED)
@@ -89,7 +89,7 @@ void free_struct_file(struct hash_elem *element, void *aux UNUSED)
 
 void free_struct_mmap(struct hash_elem *element, void *aux UNUSED)
 {
-  struct mmapElem *info = hash_entry(element, struct mmapElem, elem);
+  struct mmap_elem *info = hash_entry(element, struct mmap_elem, elem);
   free(info);
 }
 
@@ -418,7 +418,7 @@ static void syscall_mmap(struct intr_frame *f)
 
   struct file *file = file_reopen(find->file);
   lock_release(&file_lock);
-  struct mmapElem *adding = malloc(sizeof(struct mmapElem));
+  struct mmap_elem *adding = malloc(sizeof(struct mmap_elem));
   if (is_stack_address((void*)address, f->esp) || !load_mmap(file, address, adding))
   {
     free(adding);
@@ -440,7 +440,7 @@ static void syscall_mmap(struct intr_frame *f)
 static void syscall_unmmap(struct intr_frame *f)
 {
   check_validation(ARG_0);
-  struct mmapElem temp;
+  struct mmap_elem temp;
   temp.mapid = *(int *)(ARG_0);
   struct hash_elem *find = hash_find(&thread_current()->mmap_hash, &temp.elem);
   if (find == NULL)
@@ -449,7 +449,9 @@ static void syscall_unmmap(struct intr_frame *f)
     PANIC("mapid not found");
   }
   hash_delete(&thread_current()->mmap_hash, find);
+  lock_acquire (&page_lock);
   munmapHelper(find, NULL);
+  lock_release (&page_lock);
   unpin_frame(ARG_0);
 }
 
@@ -479,7 +481,7 @@ static void check_validation(void *vaddr)
   }
   else
   {
-    page_elem page_elem = pageLookUp((uint32_t)pg_round_down(vaddr));
+    page_elem page_elem = page_lookup((uint32_t)pg_round_down(vaddr));
     if (page_elem == NULL)
     {
       terminate_thread(STATUS_FAIL);
@@ -539,19 +541,19 @@ static void pin_frame(void *uaddr)
 {
   lock_acquire(&page_lock);
   /* not need to exists if failed */
-  if (pageLookUp((uint32_t)pg_round_down(uaddr)) == NULL)
+  if (page_lookup((uint32_t)pg_round_down(uaddr)) == NULL)
   {
     lock_release(&page_lock);
     return;
   }
   page_set_pin((uint32_t)pg_round_down(uaddr), true);
   /* load into frame */
-  page_elem page = pageLookUp((uint32_t) pg_round_down(uaddr));
+  page_elem page = page_lookup((uint32_t) pg_round_down(uaddr));
   if (pagedir_get_page(thread_current()->pagedir, (void*) page->page_address) == NULL)
   {
     if (page->page_status == IN_SWAP)
     {
-      void *kpage = swapBackPage(page->page_address);
+      void *kpage = swap_back_page(page->page_address);
       if (!install_page((void *) page->page_address, (void *)kpage, page->writable))
       {
         PANIC("install page failed\n");
@@ -578,7 +580,7 @@ static void unpin_frame(void *uaddr)
 {
   lock_acquire(&page_lock);
   /* not need to exists if failed */
-  if (pageLookUp((uint32_t) pg_round_down(uaddr)) == NULL)
+  if (page_lookup((uint32_t) pg_round_down(uaddr)) == NULL)
   {
     lock_release(&page_lock);
     return;
@@ -607,7 +609,7 @@ void terminate_thread (int status) {
 }
 
 static bool
-load_mmap(struct file *file, uint32_t upage, struct mmapElem *mmapElem)
+load_mmap(struct file *file, uint32_t upage, struct mmap_elem *mmap_elem)
 {
   lock_acquire(&file_lock);
   uint32_t length = file_length(file);
@@ -625,7 +627,7 @@ load_mmap(struct file *file, uint32_t upage, struct mmapElem *mmapElem)
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       
       lock_acquire (&page_lock);
-      if (pageLookUp(oldUpage) != NULL) {
+      if (page_lookup(oldUpage) != NULL) {
         lock_release (&page_lock);
         return false;
       }
@@ -636,9 +638,11 @@ load_mmap(struct file *file, uint32_t upage, struct mmapElem *mmapElem)
       oldUpage += PGSIZE;
       page_num++;
     }
-  mmapElem->page_num = page_num;
+  mmap_elem->page_num = page_num;
   for(int i = 0; i < page_num; i++) {
-    struct page_elem *page = pageTableAdding(upage + i*PGSIZE, (uint32_t) NULL, IS_MMAP);
+    lock_acquire (&page_lock);
+    struct page_elem *page = page_table_adding(upage + i*PGSIZE, (uint32_t) NULL, IS_MMAP);
+    lock_release (&page_lock);
     page->lazy_file = malloc (sizeof (struct lazy_file));
     page->lazy_file->file = file;
     page->lazy_file->offset = i*PGSIZE;
@@ -659,7 +663,7 @@ load_mmap(struct file *file, uint32_t upage, struct mmapElem *mmapElem)
 /* a helper function for munmap */
 void munmapHelper(struct hash_elem *found_elem, void *aux UNUSED)
 {
-  struct mmapElem *found = hash_entry(found_elem, struct mmapElem, elem);
+  struct mmap_elem *found = hash_entry(found_elem, struct mmap_elem, elem);
   int n = found->page_num;
   for (int i = 0; i < n; i++)
   {
@@ -669,9 +673,9 @@ void munmapHelper(struct hash_elem *found_elem, void *aux UNUSED)
       // only write back if it is dirty
       if (pagedir_is_dirty(thread_current()->pagedir, (void*) page))
       {
+        ASSERT((void*)page_lookup(page)->kernel_address != NULL);
         lock_acquire(&file_lock);
-        ASSERT((void*)pageLookUp(page)->kernel_address != NULL);
-        file_write_at(found->file, (void*)pageLookUp(page)->kernel_address, PGSIZE, pageLookUp(page)->lazy_file->offset);
+        file_write_at(found->file, (void*)page_lookup(page)->kernel_address, PGSIZE, page_lookup(page)->lazy_file->offset);
         lock_release(&file_lock);
       }
     }

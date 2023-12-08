@@ -167,7 +167,7 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
   lock_acquire (&page_lock);
 
-  struct page_elem *page = pageLookUp((uint32_t)pg_round_down(fault_addr));
+  struct page_elem *page = page_lookup((uint32_t)pg_round_down(fault_addr));
 
   /* check if it is a stack access */
   void* esp = f->esp;
@@ -187,7 +187,7 @@ page_fault (struct intr_frame *f)
         break;
       case IN_SWAP:
         /* swap the page back into frame */
-        void *kpage = swapBackPage(page->page_address);
+        void *kpage = swap_back_page(page->page_address);
         if (!install_page((void*)page->page_address, kpage, page->writable)) {
           PANIC ("install page failed\n");
         }
@@ -253,7 +253,7 @@ grow_stack (void *round_addr) {
   /* allocate a new page */
   void *kpage = palloc_get_page (PAL_USER);
   /* add the page to the supplemental page table */
-  pageTableAdding((uint32_t)round_addr, (uint32_t)kpage, IN_FRAME);
+  page_table_adding((uint32_t)round_addr, (uint32_t)kpage, IN_FRAME);
   /* add the page to the process's address space */
   if (!install_page (round_addr, kpage, true)) {
     palloc_free_page (kpage);

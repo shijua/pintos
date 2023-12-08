@@ -550,7 +550,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   if(!writable) {
     exe_list = exe_get_create (file, ofs + read_bytes + zero_bytes);
   }
+  lock_acquire (&file_lock);
   file_seek (file, ofs);
+  lock_release (&file_lock);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -561,17 +563,17 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       
       lock_acquire (&page_lock);
       /* doing lazy load */
-      if (pageLookUp((uint32_t) upage) == NULL) {
-        pageTableAdding((uint32_t) upage, (uint32_t) NULL, IN_FILE);
+      if (page_lookup((uint32_t) upage) == NULL) {
+        page_table_adding((uint32_t) upage, (uint32_t) NULL, IN_FILE);
       }
-      lock_release (&page_lock);
 
       /* clear its own pagedir if it have so it will falls into page fault*/
       if (pagedir_get_page (thread_current ()->pagedir, upage) != NULL) {
         pagedir_clear_page (thread_current ()->pagedir, upage);
       }
 
-      struct page_elem *page = pageLookUp((uint32_t) upage);
+      struct page_elem *page = page_lookup((uint32_t) upage);
+      lock_release (&page_lock);
       page->page_status = IN_FILE;
 
         if(writable) {
@@ -581,7 +583,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
           page->lazy_file->read_bytes = page_read_bytes;
           page->lazy_file->zero_bytes = page_zero_bytes;
         } else{
-        //   ASSERT(exe_list->lazy_file_list[i] != NULL);
           page->lazy_file = exe_list->lazy_file_list[i];
           exe_list->lazy_file_list[i]->file = file;
           exe_list->lazy_file_list[i]->offset = ofs;
@@ -610,12 +611,13 @@ setup_stack (void **esp)
 
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   lock_acquire (&page_lock);
-  pageTableAdding (((uint32_t) PHYS_BASE) - PGSIZE, (uint32_t) kpage, IN_FRAME);
+  page_table_adding (((uint32_t) PHYS_BASE) - PGSIZE, (uint32_t) kpage, IN_FRAME);
   success = install_page (((void*) PHYS_BASE) - PGSIZE, (void*) kpage, true);
   if (success) {
     *esp = PHYS_BASE;
   } else {
     palloc_free_page (kpage);
+    lock_release (&page_lock);
     PANIC ("setup stack failed: may not happen");
 
   }

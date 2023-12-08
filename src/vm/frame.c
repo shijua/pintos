@@ -9,6 +9,7 @@
 #include "threads/vaddr.h"
 #include "stdio.h"
 #include "string.h"
+#include "threads/interrupt.h"
 
 static struct lock frame_lock;
 static struct list frame_list;
@@ -27,12 +28,12 @@ frame_init() {
 
 unsigned
 frame_hash_func (const struct hash_elem *element, void *aux UNUSED) {
-  return getFrameHashElem(element)->frame_addr;
+  return get_frame_hash_elem(element)->frame_addr;
 }
 
 bool 
 frame_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED) {
-  return getFrameHashElem(a)->frame_addr <  getFrameHashElem(b)->frame_addr;
+  return get_frame_hash_elem(a)->frame_addr <  get_frame_hash_elem(b)->frame_addr;
 }
 
 static void
@@ -44,6 +45,7 @@ frame_index_loop(void) {
   frame_pointer = frame_pointer -> next;
 }
 
+/* add the frame into the page */
 void frame_add (uint32_t frame_addr, struct page_elem *page) {
   lock_acquire(&frame_lock);
   struct frame_elem *adding = malloc(sizeof(struct frame_elem));
@@ -63,6 +65,7 @@ void frame_add (uint32_t frame_addr, struct page_elem *page) {
   lock_release(&frame_lock);
 }
 
+/* free the */
 void
 frame_free (uint32_t kernel_addr) {
   bool locked_by_own = false;
@@ -77,7 +80,7 @@ frame_free (uint32_t kernel_addr) {
     PANIC("frame_free: frame not found");
   }
   
-  struct frame_elem *removing = getFrameHashElem(hashElem);
+  struct frame_elem *removing = get_frame_hash_elem(hashElem);
   if(frame_pointer == &removing->list_e){
     frame_index_loop();
   }
@@ -92,7 +95,7 @@ frame_free (uint32_t kernel_addr) {
 void
 frame_free_action (struct hash_elem *element, void *aux UNUSED){
   lock_acquire (&frame_lock);
-  struct frame_elem *removing = getFrameHashElem(element);
+  struct frame_elem *removing = get_frame_hash_elem(element);
   list_remove(&removing->list_e);
   if(frame_pointer == &removing->list_e){
     frame_index_loop();
@@ -109,19 +112,20 @@ frame_swap () {
     PANIC("frame_swap: frame_pointer is NULL");
   }
   // search until it is not pinned and not accessed
-  struct frame_elem *frame_elem = getFrameListElem(frame_pointer);
+  struct frame_elem *frame_elem = get_frame_list_elem(frame_pointer);
   bool locked_by_own = false;
   if (!lock_held_by_current_thread(&page_lock) && frame_elem->ppage != NULL) {
       ASSERT ((void*) frame_elem->ppage->kernel_address != NULL);
       lock_acquire(&page_lock);
       locked_by_own = true;
   }
+  // enum intr_level old_level = intr_disable ();
   while(frame_elem->ppage->is_pin ||
-   pagedir_is_accessed(getPd(frame_pointer), 
+   pagedir_is_accessed(get_pd(frame_pointer), 
                       (void *) frame_elem->ppage->page_address) == true){
-    pagedir_set_accessed(getPd(frame_pointer), (void *) frame_elem->ppage->page_address, false);
+    pagedir_set_accessed(get_pd(frame_pointer), (void *) frame_elem->ppage->page_address, false);
     frame_index_loop();
-    frame_elem = getFrameListElem(frame_pointer);
+    frame_elem = get_frame_list_elem(frame_pointer);
   }
   
   if(frame_elem->ppage->page_status == IS_MMAP ){
@@ -145,13 +149,14 @@ frame_swap () {
   } else{
     frame_elem->ppage->page_status = IN_SWAP;
     frame_elem->ppage->swapped_id = swap_out((void *) frame_elem->frame_addr);
-    frame_elem->ppage->writable = pagedir_is_writable(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address);
-    frame_elem->ppage->dirty = pagedir_is_dirty(getPd(frame_pointer), (void *) getFrameListElem(frame_pointer)->ppage->page_address);
+    frame_elem->ppage->writable = pagedir_is_writable(get_pd(frame_pointer), (void *) get_frame_list_elem(frame_pointer)->ppage->page_address);
+    frame_elem->ppage->dirty = pagedir_is_dirty(get_pd(frame_pointer), (void *) get_frame_list_elem(frame_pointer)->ppage->page_address);
   }
   frame_elem->ppage->kernel_address = (uint32_t) NULL;
   /* page need be reallocate later as kernel may request and will not add to the frame */
   palloc_free_page((void *) frame_elem->frame_addr);
   pagedir_clear_page (frame_elem->ppage->pd, (void *) frame_elem->ppage->page_address);
+  // intr_set_level (old_level);
   if (locked_by_own) {
     lock_release(&page_lock);
   }
