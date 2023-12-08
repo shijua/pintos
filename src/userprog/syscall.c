@@ -627,6 +627,9 @@ static void pin_frame(void *uaddr)
     }
     else if (page->page_status == IN_FILE || page->page_status == IS_MMAP)
     {
+      if(page->page_status == IN_FILE && !page->writable && page->lazy_file->kernel_address != NULL){
+          install_page(page->page_address, page->lazy_file->kernel_address, false);
+        }
       load_page(page->lazy_file, page);
     }
     else

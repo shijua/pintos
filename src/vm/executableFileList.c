@@ -54,7 +54,7 @@ exe_get_create (struct file* file, uint32_t size) {
     if(find == NULL) {
         struct executable_file_elem *adding = malloc(sizeof(struct executable_file_elem));
         adding -> file = file;
-        adding -> lazy_file_list = calloc(sizeof(struct lazy_file *), (size / PGSIZE));
+        adding -> lazy_file_list = calloc((size / PGSIZE), sizeof(struct lazy_file *));
         hash_insert(&exe_file_hash, &adding->elem);
         lock_release(&exe_file_lock);
         return adding;
@@ -62,3 +62,4 @@ exe_get_create (struct file* file, uint32_t size) {
     lock_release(&exe_file_lock);
     return hash_entry(find, struct executable_file_elem, elem);
 }
+// TODO free

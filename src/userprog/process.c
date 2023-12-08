@@ -542,10 +542,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
   executable_file_elem exe_list = NULL;
-  int i = 0;
-  if(writable){
+  int i = ofs/PGSIZE;
+  if(!writable) {
     exe_list = exe_get_create (file, ofs + read_bytes + zero_bytes);
   }
+  printf("address:%p\n", &exe_list);
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
@@ -567,9 +568,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       }
 
       struct page_elem *page = pageLookUp(upage);
-      lock_release (&page_lock);
-
       page->page_status = IN_FILE;
+
       if(writable || exe_list->lazy_file_list[i] == NULL) {
         if(!writable){
           exe_list->lazy_file_list[i] = malloc(sizeof(struct lazy_file));
@@ -577,14 +577,22 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         } else{
           page->lazy_file = malloc (sizeof (struct lazy_file));
         }
-
         page->lazy_file->file = file;
         page->lazy_file->offset = ofs;
         page->lazy_file->read_bytes = page_read_bytes;
         page->lazy_file->zero_bytes = page_zero_bytes;
+        printf("bb%d, %d\n", page->lazy_file->offset, ofs);
+        if (exe_list != NULL && exe_list->lazy_file_list[i] != NULL && i > 1) {
+          printf("aa%d, %d\n", exe_list->lazy_file_list[i]->offset, ofs);
+        }
       } else {
         page->lazy_file = exe_list->lazy_file_list[i];
+        printf("%d, %d\n", page->lazy_file->offset, ofs);
+        // ASSERT (page->lazy_file->offset == ofs);
+        // ASSERT (page->lazy_file->read_bytes == page_read_bytes);
+        // ASSERT (page->lazy_file->zero_bytes == page_zero_bytes);
       }
+      i++;
       page->writable = writable;
       page->swapped_id = -1;
       ofs += page_read_bytes;
@@ -592,6 +600,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
+      lock_release (&page_lock);
     }
   return true;
 }

@@ -280,8 +280,8 @@ load_page(struct lazy_file *Lfile, struct page_elem *page) {
           palloc_free_page (kpage);
           PANIC ("install page failed\n");
         }  
-         page->kernel_address = kpage;
-        
+        page->kernel_address = kpage;
+        page->lazy_file->kernel_address = kpage;
       } else {
         /* Check if writable flag for the page should be updated */
         if(page->writable && !pagedir_is_writable(t->pagedir, page->page_address)) {
