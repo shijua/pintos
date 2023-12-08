@@ -66,5 +66,4 @@ exe_get_create (struct file* file, uint32_t size) {
     }
     lock_release(&exe_file_lock);
     return hash_entry(find, struct executable_file_elem, elem);
-}
-// TODO free
+} 

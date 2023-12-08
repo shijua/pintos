@@ -65,7 +65,7 @@ void frame_add (uint32_t frame_addr, struct page_elem *page) {
   lock_release(&frame_lock);
 }
 
-/* free the */
+/* free the frame */
 void
 frame_free (uint32_t kernel_addr) {
   bool locked_by_own = false;
@@ -114,12 +114,12 @@ frame_swap () {
   // search until it is not pinned and not accessed
   struct frame_elem *frame_elem = get_frame_list_elem(frame_pointer);
   bool locked_by_own = false;
+  /* check whether page is locked when coming in */
   if (!lock_held_by_current_thread(&page_lock) && frame_elem->ppage != NULL) {
       ASSERT ((void*) frame_elem->ppage->kernel_address != NULL);
       lock_acquire(&page_lock);
       locked_by_own = true;
   }
-  // enum intr_level old_level = intr_disable ();
   while(frame_elem->ppage->is_pin ||
    pagedir_is_accessed(get_pd(frame_pointer), 
                       (void *) frame_elem->ppage->page_address) == true){
@@ -128,23 +128,12 @@ frame_swap () {
     frame_elem = get_frame_list_elem(frame_pointer);
   }
   
-  if(frame_elem->ppage->page_status == IS_MMAP ){
+  if(frame_elem->ppage->page_status == IS_MMAP){
     if(pagedir_is_dirty(frame_elem->ppage->pd, (void *) frame_elem->ppage->page_address)) {
       lock_acquire(&file_lock);
       file_write_at(frame_elem->ppage->lazy_file->file, 
         (void *)frame_elem->frame_addr, PGSIZE, frame_elem->ppage->lazy_file->offset);
       lock_release(&file_lock);
-    }
-    
-  } else if(frame_elem->ppage->page_status == IN_FILE){
-    if(frame_elem->ppage->writable ){
-      if(pagedir_is_dirty(frame_elem->ppage->pd, (void *)frame_elem->ppage->page_address)){
-        file_write_at(frame_elem->ppage->lazy_file->file, 
-          (void *)frame_elem->frame_addr, PGSIZE, frame_elem->ppage->lazy_file->offset);
-        frame_elem->ppage->lazy_file->kernel_address = (uint32_t) NULL;
-      }
-    } else{
-      frame_elem->ppage->lazy_file->kernel_address = (uint32_t) NULL;
     }
   } else{
     frame_elem->ppage->page_status = IN_SWAP;
@@ -156,7 +145,6 @@ frame_swap () {
   /* page need be reallocate later as kernel may request and will not add to the frame */
   palloc_free_page((void *) frame_elem->frame_addr);
   pagedir_clear_page (frame_elem->ppage->pd, (void *) frame_elem->ppage->page_address);
-  // intr_set_level (old_level);
   if (locked_by_own) {
     lock_release(&page_lock);
   }

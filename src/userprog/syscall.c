@@ -547,7 +547,7 @@ static void pin_frame(void *uaddr)
     return;
   }
   page_set_pin((uint32_t)pg_round_down(uaddr), true);
-  /* load into frame */
+  /* load into frame, doing same thing as page fault*/
   page_elem page = page_lookup((uint32_t) pg_round_down(uaddr));
   if (pagedir_get_page(thread_current()->pagedir, (void*) page->page_address) == NULL)
   {
@@ -562,9 +562,6 @@ static void pin_frame(void *uaddr)
     }
     else if (page->page_status == IN_FILE || page->page_status == IS_MMAP)
     {
-      if(page->page_status == IN_FILE && !page->writable && (void*)page->lazy_file->kernel_address != NULL){
-          install_page((void*)page->page_address, (void*) page->lazy_file->kernel_address, false);
-        }
       load_page(page->lazy_file, page);
     }
     else

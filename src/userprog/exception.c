@@ -15,7 +15,6 @@
 #include "filesys/file.h"
 #include "userprog/process.h"
 #include "threads/malloc.h"
-#include "vm/executableFileList.h"
 
 static void grow_stack (void *fault_addr);
 
@@ -194,15 +193,7 @@ page_fault (struct intr_frame *f)
         pagedir_set_dirty(thread_current()->pagedir, (void*)page->page_address, page->dirty);
         lock_release (&page_lock);
         break;
-      case IN_FILE:
-        /* load the file into page */
-        if(!page->writable && (void*)page->lazy_file->kernel_address != NULL){
-          install_page((void*)page->page_address, (void*)page->lazy_file->kernel_address, false);
-        }
-        load_page(page->lazy_file, page);
-        lock_release (&page_lock);
-        break;
-      case IS_MMAP:
+      default: // for both mmap and file
         /* if the lock is not released when coming to interrupt */
         load_page(page->lazy_file, page);
         lock_release (&page_lock);
@@ -271,6 +262,9 @@ load_page(struct lazy_file *Lfile, struct page_elem *page) {
    struct thread *t = thread_current();
    void *kpage = pagedir_get_page (t->pagedir, (void*)page->page_address);
    ASSERT (page != NULL);
+   if (page->page_status != IS_MMAP) {
+      page->page_status = IN_FRAME;
+   }
    if (kpage == NULL) {
         
         /* Get a new page of memory. */

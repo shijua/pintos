@@ -19,7 +19,6 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "vm/pageTable.h"
-#include "vm/executableFileList.h"
 
 static bool exists; /* use for indicate whether executable file exists */
 static thread_func start_process NO_RETURN;
@@ -390,6 +389,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Read and verify executable header. */
+  lock_acquire (&file_lock);
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
       || ehdr.e_type != 2
@@ -401,7 +401,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: error loading executable\n", file_name);
       goto done; 
     }
-
+  lock_release (&file_lock);
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
   for (i = 0; i < ehdr.e_phnum; i++) 
@@ -410,10 +410,13 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
       if (file_ofs < 0 || file_ofs > file_length (file))
         goto done;
+      lock_acquire (&file_lock);
       file_seek (file, file_ofs);
-
-      if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
+      if (file_read (file, &phdr, sizeof phdr) != sizeof phdr) {
+        lock_release (&file_lock);
         goto done;
+      }
+      lock_release (&file_lock);
       file_ofs += sizeof phdr;
       switch (phdr.p_type) 
         {
@@ -545,11 +548,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
-  executable_file_elem exe_list = NULL;
-  int i = ofs/PGSIZE;
-  if(!writable) {
-    exe_list = exe_get_create (file, ofs + read_bytes + zero_bytes);
-  }
   lock_acquire (&file_lock);
   file_seek (file, ofs);
   lock_release (&file_lock);
@@ -576,20 +574,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       lock_release (&page_lock);
       page->page_status = IN_FILE;
 
-        if(writable) {
-          page->lazy_file = malloc (sizeof (struct lazy_file));
-          page->lazy_file->file = file;
-          page->lazy_file->offset = ofs;
-          page->lazy_file->read_bytes = page_read_bytes;
-          page->lazy_file->zero_bytes = page_zero_bytes;
-        } else{
-          page->lazy_file = exe_list->lazy_file_list[i];
-          exe_list->lazy_file_list[i]->file = file;
-          exe_list->lazy_file_list[i]->offset = ofs;
-          exe_list->lazy_file_list[i]->read_bytes = page_read_bytes;
-          exe_list->lazy_file_list[i]->zero_bytes = page_zero_bytes;
-        }
-      i++;
+      page->lazy_file = malloc (sizeof (struct lazy_file));
+      page->lazy_file->file = file;
+      page->lazy_file->offset = ofs;
+      page->lazy_file->read_bytes = page_read_bytes;
+      page->lazy_file->zero_bytes = page_zero_bytes;
       page->writable = writable;
       page->swapped_id = -1;
       ofs += page_read_bytes;
