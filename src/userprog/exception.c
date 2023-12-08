@@ -289,7 +289,6 @@ void load_page(struct lazy_file *Lfile, struct page_elem *page)
       PANIC("install page failed\n");
     }
     page->kernel_address = (uint32_t)kpage;
-    page->lazy_file->kernel_address = (uint32_t)kpage;
   }
   else
   {
