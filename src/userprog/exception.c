@@ -197,6 +197,9 @@ page_fault (struct intr_frame *f)
         if(!page->writable && page->lazy_file->kernel_address != NULL){
           install_page(page->page_address, page->lazy_file->kernel_address, false);
         }
+        load_page(page->lazy_file, page);
+        lock_release (&page_lock);
+        break;
       case IS_MMAP:
         /* if the lock is not released when coming to interrupt */
         load_page(page->lazy_file, page);

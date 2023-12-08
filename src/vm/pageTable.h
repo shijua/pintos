@@ -25,6 +25,7 @@ struct lazy_file {
    off_t offset;
    size_t read_bytes;
    size_t zero_bytes;
+   uint8_t *kernel_address;
 };
 
 

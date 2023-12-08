@@ -571,7 +571,13 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
       page->page_status = IN_FILE;
       if(writable || exe_list->lazy_file_list[i] == NULL) {
-        page->lazy_file = malloc (sizeof (struct lazy_file));
+        if(!writable){
+          exe_list->lazy_file_list[i] = malloc(sizeof(struct lazy_file));
+          page->lazy_file = exe_list->lazy_file_list[i];
+        } else{
+          page->lazy_file = malloc (sizeof (struct lazy_file));
+        }
+
         page->lazy_file->file = file;
         page->lazy_file->offset = ofs;
         page->lazy_file->read_bytes = page_read_bytes;
