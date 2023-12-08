@@ -5,14 +5,26 @@
 
 #define get_zero_byte(READ_BYTE) (PGSIZE - (READ_BYTE % PGSIZE)) % PGSIZE
 
-typedef struct executable_file_elem{
+typedef struct executable_file_elem
+{
     struct file *file;
     struct hash_elem elem;
-    struct lazy_file **lazy_file_list;
     int loaded;
+    struct list lazy_file_list;
 } *executable_file_elem;
 
 void init_exe_hash(void);
-void exe_remove (struct executable_file_elem*);
-void exe_add (struct executable_file_elem*);
-executable_file_elem exe_get_create (struct file*, uint32_t);
+struct lazy_file *
+exe_set_j(struct executable_file_elem *elem,
+          int j,
+          struct file *file,
+          off_t offset,
+          size_t read_bytes,
+          size_t zero_bytes,
+          struct page_elem *ppage);
+struct lazy_file *
+exe_get_j(struct executable_file_elem *elem,
+          int j);
+void exe_remove(struct executable_file_elem *);
+void exe_add(struct executable_file_elem *);
+executable_file_elem exe_get_create(struct file *);

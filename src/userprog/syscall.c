@@ -469,7 +469,7 @@ get_file_info(int fd)
 }
 
 /* Function used for checking validation for the user virtual address is valid
-   and check kernel virtual address from the specific address given. If
+   and check whether there is page, if there is page then pin the frame. If
    the address given is invalid, call syscall_exit to terminate the process. */
 static void check_validation(void *vaddr)
 {
@@ -499,7 +499,7 @@ static void check_validation_str(char **vaddr)
 }
 
 /* Function used for making sure that the buffer stored the file is valid by
-   using for loop.  */
+   using for loop. It will also pin all the file page and load it into frame */
 static void check_validation_rw(void *buffer, unsigned size)
 {
   /* address of the start of buffer */
